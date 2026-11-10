@@ -1,0 +1,103 @@
+// Prisma schema for Synapmsg
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────────────────────────────────────
+// User
+// ───────────────────────────────────────────────────────────
+model User {
+  id                   String              @id @default(uuid()) @db.Uuid
+  email                String              @unique
+  username             String              @unique
+  name                 String
+  passwordHash         String
+  preferredLanguage    String              @default("es")
+  // "cloud" | "on-device" — validated at the API layer.
+  // (Prisma enums disallow hyphens, so we store as String.)
+  preferredTranslateMode String            @default("cloud")
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  chatParticipants ChatParticipant[]
+  messages         Message[]
+
+  @@index([email])
+  @@index([username])
+  @@map("users")
+}
+
+// ───────────────────────────────────────────────────────────
+// Chat
+// ───────────────────────────────────────────────────────────
+model Chat {
+  id        String   @id @default(uuid()) @db.Uuid
+  type      ChatType @default(single)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ChatParticipant[]
+  messages     Message[]
+
+  @@index([updatedAt])
+  @@map("chats")
+}
+
+enum ChatType {
+  single
+  group
+}
+
+// ───────────────────────────────────────────────────────────
+// ChatParticipant - join table between Chat and User
+// ───────────────────────────────────────────────────────────
+model ChatParticipant {
+  id       String           @id @default(uuid()) @db.Uuid
+  chatId   String           @db.Uuid
+  userId   String           @db.Uuid
+  role     ParticipantRole  @default(member)
+  joinedAt DateTime         @default(now())
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([chatId, userId])
+  @@index([userId])
+  @@index([chatId])
+  @@map("chat_participants")
+}
+
+enum ParticipantRole {
+  admin
+  member
+}
+
+// ───────────────────────────────────────────────────────────
+// Message
+// ───────────────────────────────────────────────────────────
+model Message {
+  id                 String   @id @default(uuid()) @db.Uuid
+  chatId             String   @db.Uuid
+  senderId           String   @db.Uuid
+  originalText       String
+  originalLanguage   String
+  translatedText     String?
+  translatedLanguage String?
+  isTranslated       Boolean  @default(false)
+  createdAt          DateTime @default(now())
+
+  chat   Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender User @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([chatId, createdAt])
+  @@index([senderId])
+  @@index([chatId])
+  @@map("messages")
+}

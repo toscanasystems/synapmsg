@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&family=JetBrains+Mono:wght@400;500&display=swap");
+
+:root {
+  --primary: #000000;
+  --accent: #30b0b0;
+  --accent-light: #40c0c0;
+  --accent-dark: #107090;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: "Inter", system-ui, sans-serif;
+  background: #000000;
+  color: #ffffff;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Gradient text — paleta Toscana */
+.gradient-text {
+  background: linear-gradient(135deg, #40C0C0 0%, #30B0B0 50%, #107090 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glow effect — teal Toscana */
+.glow {
+  box-shadow: 0 0 40px rgba(48, 176, 176, 0.4);
+}
+
+.glow-strong {
+  box-shadow: 0 0 60px rgba(48, 176, 176, 0.6);
+}
+
+/* Hero background pattern — mejor para tema oscuro */
+.hero-pattern {
+  background-image:
+    radial-gradient(circle at 20% 50%, rgba(48, 176, 176, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 80% 30%, rgba(64, 192, 192, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 50% 80%, rgba(16, 112, 144, 0.1) 0%, transparent 50%);
+  background-color: #000000;
+}
+
+/* Grid pattern overlay */
+.grid-pattern {
+  background-image:
+    linear-gradient(rgba(48, 176, 176, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(48, 176, 176, 0.05) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Smooth scrollbar — tema oscuro */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0A0A0A;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #30b0b0;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #40c0c0;
+}
+
+/* Selection */
+::selection {
+  background: #30b0b0;
+  color: #000000;
+}

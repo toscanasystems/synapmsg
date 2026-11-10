@@ -1,0 +1,23 @@
+{
+  "name": "synapmsg",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mensajería cifrada con traducción nativa para LatAm",
+  "workspaces": [
+    "apps/api",
+    "apps/landing"
+  ],
+  "scripts": {
+    "dev:api": "cd apps/api && npm run dev",
+    "dev:landing": "cd apps/landing && npm run dev",
+    "dev:mobile": "cd apps/mobile && npx expo start",
+    "build:api": "cd apps/api && npm run build",
+    "build:landing": "cd apps/landing && npm run build",
+    "db:push": "cd apps/api && npx prisma db push",
+    "db:migrate": "cd apps/api && npx prisma migrate dev",
+    "db:studio": "cd apps/api && npx prisma studio"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
