@@ -11,7 +11,7 @@
     features: [
       "Modo Privado: el servidor no lee el mensaje",
       "Modo Nube opcional con aviso",
-      "Registro con correo",
+      "Alta con número de 10 dígitos (sin correo ni SIM)",
       "Cuota de media limitada",
     ],
   },

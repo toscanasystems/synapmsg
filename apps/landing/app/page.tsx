@@ -2,7 +2,6 @@ import { Nav } from "@/components/Nav";
 import { Hero } from "@/components/Hero";
 import { HowItWorks } from "@/components/HowItWorks";
 import { SecurityExplained } from "@/components/SecurityExplained";
-import { Features } from "@/components/Features";
 import { HowToStart } from "@/components/HowToStart";
 import { Comparison } from "@/components/Comparison";
 import { Pricing } from "@/components/Pricing";
@@ -15,7 +14,7 @@ export default function Home() {
       <Hero />
       <HowItWorks />
       <SecurityExplained />
-      <Features />
+      {/* Features.tsx desmontado: duplicaba SecurityExplained con copy viejo. */}
       <HowToStart />
       <Comparison />
       <Pricing />

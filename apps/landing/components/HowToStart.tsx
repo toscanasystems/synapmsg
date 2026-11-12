@@ -2,7 +2,7 @@
   {
     n: "01",
     title: "Descargá Synap para Android",
-    body: "Instalá la APK y creá tu cuenta con correo. Sin SIM obligatoria.",
+    body: "Instalá la app y ya tienes cuenta: se te asigna un número de 10 dígitos. Sin correo y sin SIM.",
   },
   {
     n: "02",

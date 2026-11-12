@@ -47,11 +47,11 @@ const ROWS: Row[] = [
     Synap: true,
   },
   {
-    feature: "Todavía no: llamadas de voz y video",
+    feature: "Llamadas de voz y video",
     Synap: "Todavía no",
   },
   {
-    feature: "Todavía no: canales y archivos de más de 25 MB",
+    feature: "Canales y archivos de más de 25 MB",
     Synap: "Todavía no",
   },
 ];

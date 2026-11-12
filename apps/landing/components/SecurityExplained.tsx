@@ -17,14 +17,14 @@ const DEMOSTRADO = [
   },
   {
     title: "Cuenta sin SIM",
-    body: "Podés registrarte con correo. Un Private Number virtual es opcional para que te encuentren solo si lo compartís.",
+    body: "Al instalar se te asigna un número de 10 dígitos. Sin correo y sin SIM. El correo es opcional para recuperar.",
   },
 ];
 
 const TODAVIA_NO = [
   "Wipe remoto, PIN de coacción y llaves físicas como paquete cerrado.",
   "Más pares on-device que inglés↔español demostrados en dispositivo.",
-  "Llamadas, grupos y archivos grandes como promesas cerradas.",
+  "Llamadas de voz y video.",
 ];
 export function SecurityExplained() {
   return (
