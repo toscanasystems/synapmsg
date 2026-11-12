@@ -11,7 +11,7 @@ const DEFAULT_API = 'https://api.synapmsg.ai';
 function corsHeaders(): HeadersInit {
   return {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, PUT, POST, PATCH, DELETE, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, HEAD, PUT, POST, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers':
       'Authorization, Content-Type, X-Upload-Secret, X-Synap-Tunnel',
   };
@@ -176,12 +176,32 @@ export default {
       return json({ ok: true, service: 'synapmsg-media' });
     }
 
-    // GET /* — public object serve
-    if (request.method === 'GET') {
+    // GET|HEAD /* — public object serve (HEAD = same headers, empty body)
+    if (request.method === 'GET' || request.method === 'HEAD') {
       const key = decodeURIComponent(url.pathname.replace(/^\/+/, ''));
       if (!key || key.includes('..')) {
         return json({ error: 'Not found' }, 404);
       }
+
+      if (request.method === 'HEAD') {
+        const meta = await env.MEDIA.head(key);
+        if (!meta) return json({ error: 'Not found' }, 404);
+        const headers = new Headers(corsHeaders());
+        headers.set(
+          'Content-Type',
+          meta.httpMetadata?.contentType || 'application/octet-stream',
+        );
+        headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+        if (meta.size != null) headers.set('Content-Length', String(meta.size));
+        if (key.endsWith('.apk')) {
+          headers.set(
+            'Content-Disposition',
+            `attachment; filename="${key.split('/').pop() || 'synap-android.apk'}"`,
+          );
+        }
+        return new Response(null, { status: 200, headers });
+      }
+
       const obj = await env.MEDIA.get(key);
       if (!obj) return json({ error: 'Not found' }, 404);
 
