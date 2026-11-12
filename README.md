@@ -33,7 +33,7 @@ Ver sección en `docs/HECHO.md` (Signal/libsignal, traducción on-device probada
 synapmsg/
 ├── apps/api/            # Express + Prisma + WebSocket
 ├── apps/mobile/         # Expo / React Native
-├── apps/landing/        # Next.js → synapmsg.ai
+├── apps/landing/        # Next.js → Cloudflare Pages → synapmsg.ai
 ├── apps/media-worker/   # Cloudflare Worker + R2
 └── docs/HECHO.md        # Única lista de afirmaciones demostradas
 ```
@@ -54,5 +54,5 @@ Sin `JWT_SECRET` válido la API no inicia.
 
 | App | Host |
 |---|---|
-| API | https://api.synapmsg.ai |
-| Landing | https://synapmsg.ai |
+| API | https://api.synapmsg.ai (Railway) |
+| Landing | https://synapmsg.ai (Cloudflare Pages) |

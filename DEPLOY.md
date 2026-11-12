@@ -12,7 +12,7 @@ Antes de ejecutar el deploy, necesitas crear estas cuentas (todas tienen free ti
 - [ ] **GitHub repo** — crea `synapmsg` vacío en tu cuenta
 - [ ] **DeepL API** — https://www.deepl.com/pro#developer (free 500K chars/mes)
 - [ ] **Railway** — https://railway.app (login con GitHub, $5/mes Hobby)
-- [ ] **Vercel** — https://vercel.com (login con GitHub, free)
+- [ ] **Cloudflare Pages** — misma cuenta Cloudflare (landing → synapmsg.ai)
 
 ### Opcional (15 min)
 - [ ] **Cloudflare R2** — para almacenamiento multimedia (10GB free)
@@ -37,17 +37,17 @@ npm --version
 git --version
 ```
 
-### 3. CLIs de los servicios (instala los 3)
+### 3. CLIs de los servicios
 ```bash
 npm install -g @railway/cli
-npm install -g vercel
+npm install -g wrangler
 npm install -g eas-cli
 ```
 
 Verifica:
 ```bash
 railway --version
-vercel --version
+wrangler --version
 eas --version
 ```
 
@@ -125,7 +125,7 @@ El script va a:
 4. ✅ Crear tablas en Neon (`prisma db push`)
 5. ✅ Inicializar Git y subir a GitHub
 6. ✅ Deploy del backend a Railway
-7. ✅ Deploy de la landing a Vercel
+7. ✅ Deploy de la landing a Cloudflare Pages
 8. ✅ Build de la app móvil (iOS + Android) con EAS
 
 Tiempo total: ~30-45 minutos (la mayor parte es esperar builds).
@@ -139,11 +139,12 @@ Cuando `deploy.sh` termine, faltarán 3 cosas:
 2. Settings → Networking → Generate Domain
 3. Te dará una URL tipo `synapmsg-api.up.railway.app` (la que ya configuramos en Cloudflare!)
 
-#### 4.2 Configurar dominio en Vercel
-1. Entra a https://vercel.com → tu proyecto Synapmsg
-2. Settings → Domains → Add
-3. Escribe `synapmsg.ai` y sigue las instrucciones
-4. Vercel te pedirá verificar propiedad del dominio (ya está en Cloudflare, automáticamente detecta)
+#### 4.2 Landing en Cloudflare Pages
+1. En `apps/landing`: `npm run build` (export estático a `out/`)
+2. `wrangler login` (cuenta TOSCANA / Cloudflare)
+3. `wrangler pages deploy out --project-name=synapmsg --commit-dirty=true`
+4. Dominio custom: proyecto `synapmsg` → Custom domains → `synapmsg.ai` / `www.synapmsg.ai`
+   (no cambies el DNS a mano si el custom domain ya está enlazado)
 
 #### 4.3 Subir builds a stores
 Cuando EAS termine los builds (te llegará email):
@@ -199,11 +200,13 @@ git pull origin main --allow-unrelated-histories
 git push -u origin main
 ```
 
-### Vercel no detecta Next.js
-Asegúrate de estar en `apps/landing` cuando ejecutes `vercel`:
+### Cloudflare Pages / wrangler falla
+Asegúrate de estar autenticado y de desplegar la carpeta `out` tras el build:
 ```bash
 cd apps/landing
-vercel --prod
+npm run build
+wrangler whoami
+wrangler pages deploy out --project-name=synapmsg --commit-dirty=true
 ```
 
 ### Build de EAS falla
