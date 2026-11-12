@@ -8,8 +8,7 @@ Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 ### Demostrado
 
 Primer mensaje entre dos cuentas nuevas: se lee en claro. Deduplicación por id
-para que el mensaje no se abra dos veces. Probado entre dos cuentas nunca vistas,
-con el log decrypt ok.
+para que el mensaje no se abra dos veces. Probado con el log decrypt ok.
 
 APK release con dedup + caché de plaintext (`synapmsg-v79-dedup.apk` → R2
 `downloads/synap-android.apk`). Toscana SM-A356E ↔ Samsung SM-A566E; cuentas
