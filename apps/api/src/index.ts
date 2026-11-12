@@ -27,6 +27,7 @@ import {
 import { startDmsScheduler, stopDmsScheduler } from './security/dmsScheduler';
 import { getCallConfig } from './calls/config';
 import callsRouter from './calls/routes';
+import pollsRouter from './polls/routes';
 import { authMiddleware } from './middleware/auth';
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -190,6 +191,7 @@ app.use('/security', securityRouter);
 app.use('/bots', botsRouter);
 app.use('/wallet', walletRouter);
 app.use('/chats', chatsRouter);
+app.use('/chats/:chatId/polls', pollsRouter);
 // Messages router handles /chats/:chatId/messages (mounted alongside chats router)
 app.use('/chats', messagesRouter);
 app.use('/calls', callsRouter);

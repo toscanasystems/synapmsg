@@ -21,6 +21,7 @@ export type ChatMenuAction =
   | 'archive'
   | 'hide'
   | 'disappearing'
+  | 'poll'
   | 'wallpaper'
   | 'add_list'
   | 'export'
@@ -49,6 +50,7 @@ const DIRECT_ITEMS: MenuItem[] = [
   { id: 'archive', label: 'Archivar chat' },
   { id: 'hide', label: 'Ocultar chat (PIN)' },
   { id: 'disappearing', label: 'Autodestrucción' },
+  { id: 'poll', label: 'Encuesta' },
   { id: 'wallpaper', label: 'Fondo de pantalla' },
   { id: 'add_list', label: 'Agregar a lista' },
   { id: 'export', label: 'Exportar chat' },
@@ -66,6 +68,7 @@ const GROUP_ITEMS: MenuItem[] = [
   { id: 'archive', label: 'Archivar chat' },
   { id: 'hide', label: 'Ocultar chat (PIN)' },
   { id: 'disappearing', label: 'Autodestrucción' },
+  { id: 'poll', label: 'Encuesta' },
   { id: 'wallpaper', label: 'Fondo de pantalla' },
   { id: 'add_list', label: 'Agregar a lista' },
   { id: 'clear', label: 'Vaciar chat' },

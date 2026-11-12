@@ -88,6 +88,9 @@ export function ChatBubble({
   const [editText, setEditText] = useState(message.originalText);
   const [ephemeralUri, setEphemeralUri] = useState<string | null>(null);
   const [openedMediaUri, setOpenedMediaUri] = useState<string | null>(null);
+  const [poll, setPoll] = useState<import('../api/polls').PollView | null>(
+    null,
+  );
 
   const mediaFromText = useMemo(() => {
     const a = extractMediaMeta(message.originalText);
@@ -125,6 +128,27 @@ export function ChatBubble({
       cancelled = true;
     };
   }, [mediaFromText.meta, message.mediaUrl, message.deletedAt]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (message.mediaType !== 'poll' || !message.mediaUrl?.startsWith('poll:')) {
+      setPoll(null);
+      return;
+    }
+    const pollId = message.mediaUrl.slice('poll:'.length);
+    void (async () => {
+      try {
+        const { pollsApi } = await import('../api/polls');
+        const p = await pollsApi.get(message.chatId, pollId);
+        if (!cancelled) setPoll(p);
+      } catch {
+        if (!cancelled) setPoll(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [message.mediaType, message.mediaUrl, message.chatId]);
 
   const viewOncePending =
     Boolean(message.viewOnce) &&
@@ -323,6 +347,64 @@ export function ChatBubble({
                   numberOfLines={2}
                 >
                   {message.replyTo.text}
+                </Text>
+              </View>
+            ) : null}
+
+            {!message.deletedAt && poll ? (
+              <View style={styles.pollBox}>
+                <Text
+                  style={[
+                    styles.text,
+                    isMine ? styles.textMine : styles.textTheirs,
+                    { fontWeight: '600' },
+                  ]}
+                >
+                  {poll.question}
+                  {poll.anonymous ? ' · anónima' : ''}
+                  {poll.quiz ? ' · quiz' : ''}
+                </Text>
+                {poll.options.map((o) => (
+                  <Pressable
+                    key={o.id}
+                    style={styles.pollOpt}
+                    onPress={() => {
+                      void (async () => {
+                        try {
+                          const { pollsApi } = await import('../api/polls');
+                          const next = await pollsApi.vote(
+                            message.chatId,
+                            poll.id,
+                            o.id,
+                          );
+                          setPoll(next);
+                        } catch (err) {
+                          Alert.alert(
+                            'Encuesta',
+                            err instanceof Error ? err.message : 'No se pudo votar',
+                          );
+                        }
+                      })();
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.text,
+                        isMine ? styles.textMine : styles.textTheirs,
+                      ]}
+                    >
+                      {poll.myVote === o.id ? '✓ ' : ''}
+                      {o.text} ({o.votes})
+                    </Text>
+                  </Pressable>
+                ))}
+                <Text
+                  style={[
+                    styles.meta,
+                    isMine ? styles.metaMine : styles.metaTheirs,
+                  ]}
+                >
+                  {poll.totalVotes} voto(s)
                 </Text>
               </View>
             ) : null}
@@ -651,6 +733,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     marginBottom: spacing.xs,
+  },
+  pollBox: {
+    marginBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  pollOpt: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    marginTop: 4,
   },
   viewOnceBtn: {
     flexDirection: 'row',

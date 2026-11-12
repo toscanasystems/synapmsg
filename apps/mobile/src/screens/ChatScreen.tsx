@@ -745,6 +745,80 @@ export function ChatScreen(): JSX.Element {
           if (archived) navigation.navigate('ChatList');
           break;
         }
+        case 'poll': {
+          if (chatMeta?.encryptionMode === 'e2e') {
+            Alert.alert(
+              'Encuesta',
+              'Las encuestas van en chats Nube (conteo en el servidor). Cambia Privacidad → nube.',
+            );
+            break;
+          }
+          Alert.alert('Nueva encuesta', '¿Café o té?', [
+            { text: 'Cancelar', style: 'cancel' },
+            {
+              text: 'Con nombre',
+              onPress: () => {
+                void import('../api/polls')
+                  .then((m) =>
+                    m.pollsApi.create(chatId, {
+                      question: '¿Café o té?',
+                      options: ['Café', 'Té'],
+                      anonymous: false,
+                    }),
+                  )
+                  .then(() => void fetchMessages(chatId))
+                  .catch((err) =>
+                    Alert.alert(
+                      'Encuesta',
+                      err instanceof Error ? err.message : 'Error',
+                    ),
+                  );
+              },
+            },
+            {
+              text: 'Anónima',
+              onPress: () => {
+                void import('../api/polls')
+                  .then((m) =>
+                    m.pollsApi.create(chatId, {
+                      question: '¿Café o té?',
+                      options: ['Café', 'Té'],
+                      anonymous: true,
+                    }),
+                  )
+                  .then(() => void fetchMessages(chatId))
+                  .catch((err) =>
+                    Alert.alert(
+                      'Encuesta',
+                      err instanceof Error ? err.message : 'Error',
+                    ),
+                  );
+              },
+            },
+            {
+              text: 'Quiz',
+              onPress: () => {
+                void import('../api/polls')
+                  .then((m) =>
+                    m.pollsApi.create(chatId, {
+                      question: '¿Capital de Guatemala?',
+                      options: ['Guatemala', 'Antigua'],
+                      quiz: true,
+                      correctOptionIndex: 0,
+                    }),
+                  )
+                  .then(() => void fetchMessages(chatId))
+                  .catch((err) =>
+                    Alert.alert(
+                      'Encuesta',
+                      err instanceof Error ? err.message : 'Error',
+                    ),
+                  );
+              },
+            },
+          ]);
+          break;
+        }
         case 'disappearing': {
           const pickTypes = (hours: DisappearHours) => {
             Alert.alert(

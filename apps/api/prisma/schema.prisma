@@ -54,6 +54,7 @@ model User {
   trustedLoginDevices TrustedLoginDevice[]
   ownedBots          Bot[]               @relation("BotOwner")
   botIdentity        Bot?                @relation("BotIdentity")
+  pollsCreated       ChatPoll[]
 
   @@index([email])
   @@index([username])
@@ -208,6 +209,7 @@ model Chat {
   participants      ChatParticipant[]
   messages          Message[]
   scheduledMessages ScheduledMessage[]
+  polls             ChatPoll[]
 
   @@index([updatedAt])
   @@map("chats")
@@ -336,4 +338,52 @@ model ScheduledMessage {
   @@index([chatId])
   @@index([senderId])
   @@map("scheduled_messages")
+}
+
+model ChatPoll {
+  id              String   @id @default(uuid()) @db.Uuid
+  chatId          String   @db.Uuid
+  creatorId       String   @db.Uuid
+  question        String
+  anonymous       Boolean  @default(false)
+  quiz            Boolean  @default(false)
+  correctOptionId String?  @db.Uuid
+  messageId       String?  @unique @db.Uuid
+  createdAt       DateTime @default(now())
+
+  chat    Chat             @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  creator User             @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  options ChatPollOption[]
+  votes   ChatPollVote[]
+
+  @@index([chatId])
+  @@map("chat_polls")
+}
+
+model ChatPollOption {
+  id     String @id @default(uuid()) @db.Uuid
+  pollId String @db.Uuid
+  text   String
+  sort   Int    @default(0)
+  votes  ChatPollVote[]
+
+  poll ChatPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+
+  @@index([pollId])
+  @@map("chat_poll_options")
+}
+
+model ChatPollVote {
+  id        String   @id @default(uuid()) @db.Uuid
+  pollId    String   @db.Uuid
+  optionId  String   @db.Uuid
+  userId    String   @db.Uuid
+  createdAt DateTime @default(now())
+
+  poll   ChatPoll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  option ChatPollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, userId])
+  @@index([optionId])
+  @@map("chat_poll_votes")
 }
