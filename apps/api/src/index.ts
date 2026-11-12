@@ -98,6 +98,15 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', service: 'synapmsg-api', time: new Date().toISOString() });
 });
 
+// FIDO2 HTML pages need inline JS (navigator.credentials). Helmet's default CSP
+// blocks them — relax only under /security/*.html helpers.
+app.use('/security', (req, res, next) => {
+  res.setHeader(
+    'Content-Security-Policy',
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'self'",
+  );
+  next();
+});
 app.use('/security', express.static(path.join(__dirname, '..', 'public', 'security')));
 
 // Call media: Jitsi SFU (default) or P2P WebRTC fallback. Signaling stays on Synap WS.

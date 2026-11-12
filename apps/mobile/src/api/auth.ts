@@ -22,6 +22,7 @@ export type LoginResult =
       loginTicket: string;
       userId: string;
       hasRecoveryCodes: boolean;
+      reason?: string;
     };
 
 export const authApi = {
@@ -33,10 +34,12 @@ export const authApi = {
   async loginWithRecovery(
     loginTicket: string,
     code: string,
+    deviceInstallId?: string,
   ): Promise<AuthResponse> {
     const { data } = await apiClient.post<AuthResponse>('/auth/login/recovery', {
       loginTicket,
       code,
+      deviceInstallId,
     });
     return data;
   },

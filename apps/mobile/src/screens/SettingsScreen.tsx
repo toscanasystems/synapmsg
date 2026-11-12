@@ -1200,9 +1200,16 @@ export function SettingsScreen(): JSX.Element {
                       {
                         text: 'Abrir enrolamiento',
                         onPress: () => {
-                          void Linking.openURL(
-                            'https://api.synapmsg.ai/security/webauthn.html',
-                          );
+                          void (async () => {
+                            const { getDeviceInstallId } = await import(
+                              '../security/deviceInstallId'
+                            );
+                            const device = await getDeviceInstallId();
+                            const t = useAuthStore.getState().token || '';
+                            void Linking.openURL(
+                              `https://api.synapmsg.ai/security/webauthn.html?token=${encodeURIComponent(t)}&device=${encodeURIComponent(device)}`,
+                            );
+                          })();
                         },
                       },
                       {

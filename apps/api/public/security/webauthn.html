@@ -16,12 +16,16 @@
   <h1>Synapmsg FIDO2</h1>
   <p>Enrola una YubiKey / passkey. Pegá tu JWT de sesión (Ajustes → o login API).</p>
   <input id="token" placeholder="Bearer JWT" />
+  <input id="device" placeholder="deviceInstallId (opcional)" />
   <input id="label" placeholder="Etiqueta (ej. YubiKey 5)" value="YubiKey" />
   <button id="reg">Registrar passkey</button>
   <button id="auth">Probar autenticación</button>
   <div class="msg" id="msg"></div>
   <script>
     const API = location.origin;
+    const qs = new URLSearchParams(location.search);
+    if (qs.get('token')) document.getElementById('token').value = qs.get('token');
+    if (qs.get('device')) document.getElementById('device').value = qs.get('device');
     const msg = (t) => { document.getElementById('msg').textContent = t; };
     const headers = () => ({
       'Content-Type': 'application/json',
@@ -62,6 +66,7 @@
             attestationObject: bufToB64url(cred.response.attestationObject),
           },
           label: document.getElementById('label').value || 'Passkey',
+          deviceInstallId: document.getElementById('device').value.trim(),
         };
         const ver = await fetch(API + '/security/webauthn/register/verify', {
           method: 'POST', headers: headers(), body: JSON.stringify(att),

@@ -203,6 +203,8 @@ export interface Message {
 export interface LoginRequest {
   email: string;
   password: string;
+  /** Sent so FIDO2 is only required on unknown installations. */
+  deviceInstallId?: string;
 }
 
 export interface RegisterRequest {

@@ -10,9 +10,10 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
+import * as WebBrowser from 'expo-web-browser';
 import authApi from '../api/auth';
 import { mapAuthError } from '../api/authErrors';
-import { setAuthToken, setOnUnauthorized } from '../api/client';
+import { setAuthToken, setOnUnauthorized, API_BASE_URL } from '../api/client';
 import wsManager from '../api/websocket';
 import { User, LoginRequest, RegisterRequest } from '../types';
 import {
@@ -20,6 +21,9 @@ import {
   getAuthSession,
   setAuthSession,
 } from '../security/secureVault';
+import { getDeviceInstallId } from '../security/deviceInstallId';
+
+WebBrowser.maybeCompleteAuthSession();
 
 interface AuthState {
   user: User | null;
@@ -120,21 +124,42 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   login: async (payload) => {
     set({ isLoading: true, error: null });
     try {
-      const result = await authApi.login(payload);
-      // Never block the owner with FIDO2 gate in the app.
+      const deviceInstallId = await getDeviceInstallId();
+      const result = await authApi.login({ ...payload, deviceInstallId });
       if ('requiresWebAuthn' in result && result.requiresWebAuthn) {
+        // New installation + enrolled key → browser WebAuthn, then deep link back.
+        const url =
+          `${API_BASE_URL}/security/login-fido2.html` +
+          `?ticket=${encodeURIComponent(result.loginTicket)}` +
+          `&device=${encodeURIComponent(deviceInstallId)}`;
         set({
           isLoading: false,
           error:
-            'Login 2FA desactivado en servidor. Pedile a soporte LOGIN_SKIP_FIDO2=1 o usá otra cuenta.',
+            'Este teléfono es nuevo: confirmá con tu llave física (FIDO2).',
         });
-        throw new Error('FIDO2_BLOCKED');
+        const browser = await WebBrowser.openAuthSessionAsync(
+          url,
+          'synapmsg://auth/fido2',
+        );
+        if (browser.type === 'success' && browser.url) {
+          const q = browser.url.includes('?')
+            ? browser.url.slice(browser.url.indexOf('?') + 1)
+            : '';
+          const params = new URLSearchParams(q);
+          const token = params.get('token');
+          const userRaw = params.get('user');
+          if (token && userRaw) {
+            const user = JSON.parse(decodeURIComponent(userRaw)) as User;
+            await get().adoptSession(token, user);
+            return;
+          }
+        }
+        throw new Error('FIDO2_REQUIRED');
       }
       const { token, user } = result as {
         token: string;
         user: import('../types').User;
       };
-      // Set session in memory first so UI enters even if vault write fails.
       setAuthToken(token);
       set({ token, user, isLoading: false, error: null });
       try {
@@ -148,7 +173,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         /* WS is best-effort; auth already succeeded */
       }
     } catch (err) {
-      if (err instanceof Error && err.message === 'FIDO2_BLOCKED') {
+      if (err instanceof Error && err.message === 'FIDO2_REQUIRED') {
+        set({
+          isLoading: false,
+          error: 'Sin llave física no se puede entrar en este teléfono nuevo.',
+        });
         throw err;
       }
       const message = mapAuthError(err);
@@ -160,7 +189,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   completeRecoveryLogin: async (loginTicket: string, code: string) => {
     set({ isLoading: true, error: null });
     try {
-      const { token, user } = await authApi.loginWithRecovery(loginTicket, code);
+      const deviceInstallId = await getDeviceInstallId();
+      const { token, user } = await authApi.loginWithRecovery(
+        loginTicket,
+        code,
+        deviceInstallId,
+      );
       await setAuthSession(token, JSON.stringify(user));
       setAuthToken(token);
       set({ token, user, isLoading: false, error: null });

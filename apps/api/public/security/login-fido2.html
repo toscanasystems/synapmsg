@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Synapmsg · Llave física</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0a0a0a; color: #fff; padding: 24px; max-width: 480px; margin: 0 auto; }
+    h1 { color: #30B0B0; font-size: 1.35rem; }
+    p { color: #a0a0a0; line-height: 1.45; }
+    button { width: 100%; padding: 14px; margin: 12px 0; border-radius: 8px; border: none; background: #30B0B0; color: #000; font-weight: 600; cursor: pointer; }
+    .msg { margin-top: 12px; color: #a0a0a0; white-space: pre-wrap; font-size: 0.9rem; }
+    .err { color: #ff8a80; }
+  </style>
+</head>
+<body>
+  <h1>Llave física (FIDO2)</h1>
+  <p>Este teléfono es nuevo para tu cuenta. Tocá la llave o el sensor del teléfono para continuar.</p>
+  <button id="go">Usar llave</button>
+  <div class="msg" id="msg"></div>
+  <script>
+    const API = location.origin;
+    const params = new URLSearchParams(location.search);
+    const ticket = params.get('ticket') || '';
+    const deviceInstallId = params.get('device') || '';
+    const msg = (t, err) => {
+      const el = document.getElementById('msg');
+      el.textContent = t;
+      el.className = 'msg' + (err ? ' err' : '');
+    };
+    function b64urlToBuf(b64url) {
+      const pad = '='.repeat((4 - (b64url.length % 4)) % 4);
+      const b64 = (b64url + pad).replace(/-/g, '+').replace(/_/g, '/');
+      const bin = atob(b64);
+      const buf = new ArrayBuffer(bin.length);
+      const view = new Uint8Array(buf);
+      for (let i = 0; i < bin.length; i++) view[i] = bin.charCodeAt(i);
+      return buf;
+    }
+    function bufToB64url(buf) {
+      const bytes = new Uint8Array(buf);
+      let s = '';
+      bytes.forEach((b) => { s += String.fromCharCode(b); });
+      return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+    if (!ticket) msg('Falta loginTicket. Volvé a iniciar sesión en la app.', true);
+    document.getElementById('go').onclick = async () => {
+      try {
+        if (!ticket) throw new Error('Sin ticket');
+        msg('Pedí opciones…');
+        const optRes = await fetch(API + '/auth/login/webauthn/options', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ loginTicket: ticket }),
+        });
+        const opts = await optRes.json();
+        if (!optRes.ok) throw new Error(opts.error || 'options failed');
+        opts.challenge = b64urlToBuf(opts.challenge);
+        if (opts.allowCredentials) {
+          opts.allowCredentials = opts.allowCredentials.map((c) => ({
+            ...c,
+            id: b64urlToBuf(c.id),
+          }));
+        }
+        msg('Esperando llave…');
+        const cred = await navigator.credentials.get({ publicKey: opts });
+        const assertion = {
+          id: cred.id,
+          rawId: bufToB64url(cred.rawId),
+          type: cred.type,
+          response: {
+            clientDataJSON: bufToB64url(cred.response.clientDataJSON),
+            authenticatorData: bufToB64url(cred.response.authenticatorData),
+            signature: bufToB64url(cred.response.signature),
+            userHandle: cred.response.userHandle
+              ? bufToB64url(cred.response.userHandle)
+              : null,
+          },
+        };
+        const ver = await fetch(API + '/auth/login/webauthn/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            loginTicket: ticket,
+            deviceInstallId,
+            assertion,
+          }),
+        });
+        const out = await ver.json();
+        if (!ver.ok) throw new Error(out.error || 'verify failed');
+        msg('Listo. Volviendo a la app…');
+        const deep =
+          'synapmsg://auth/fido2?token=' +
+          encodeURIComponent(out.token) +
+          '&user=' +
+          encodeURIComponent(JSON.stringify(out.user));
+        location.href = deep;
+      } catch (e) {
+        msg(String(e.message || e), true);
+      }
+    };
+  </script>
+</body>
+</html>

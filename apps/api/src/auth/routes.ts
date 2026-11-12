@@ -44,6 +44,24 @@ interface RegisterBody {
 interface LoginBody {
   email?: unknown;
   password?: unknown;
+  /** Stable per-install id — FIDO2 only when unknown and keys are enrolled. */
+  deviceInstallId?: unknown;
+}
+
+async function trustLoginDevice(
+  userId: string,
+  deviceInstallId: string,
+  label = '',
+): Promise<void> {
+  const id = deviceInstallId.trim().slice(0, 128);
+  if (!id) return;
+  await prisma.trustedLoginDevice.upsert({
+    where: {
+      userId_deviceInstallId: { userId, deviceInstallId: id },
+    },
+    create: { userId, deviceInstallId: id, label: label.slice(0, 64) },
+    update: { lastSeenAt: new Date() },
+  });
 }
 
 /**
@@ -290,7 +308,8 @@ router.post('/bootstrap', async (req: Request, res: Response, next: NextFunction
 // ───────────────────────────────────────────────────────────
 router.post('/login', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { email, password } = (req.body ?? {}) as LoginBody;
+    const { email, password, deviceInstallId: rawDevice } =
+      (req.body ?? {}) as LoginBody;
 
     if (typeof email !== 'string' || !email.trim()) {
       res.status(400).json({ error: 'email is required' });
@@ -300,6 +319,8 @@ router.post('/login', async (req: Request, res: Response, next: NextFunction) =>
       res.status(400).json({ error: 'password is required' });
       return;
     }
+    const deviceInstallId =
+      typeof rawDevice === 'string' ? rawDevice.trim().slice(0, 128) : '';
 
     const loginId = email.trim();
     const user = looksLikePrivateNumber(loginId)
@@ -345,24 +366,37 @@ router.post('/login', async (req: Request, res: Response, next: NextFunction) =>
       data: { lastActiveAt: new Date(), lastSeenAt: new Date() },
     });
 
-    const skipFido =
-      (process.env.NODE_ENV || 'development') !== 'production' &&
-      (process.env.LOGIN_SKIP_FIDO2 === '1' ||
-        process.env.LOGIN_SKIP_FIDO2 === 'true');
-    const credCount = skipFido
-      ? 0
-      : await prisma.webAuthnCredential.count({
-          where: { userId: fresh.id },
+    // No enrolled key → login as always (password only).
+    const credCount = await prisma.webAuthnCredential.count({
+      where: { userId: fresh.id },
+    });
+    if (credCount > 0) {
+      // Known installation skips FIDO2; only a new phone must assert.
+      const known = deviceInstallId
+        ? await prisma.trustedLoginDevice.findUnique({
+            where: {
+              userId_deviceInstallId: {
+                userId: fresh.id,
+                deviceInstallId,
+              },
+            },
+          })
+        : null;
+      if (!known) {
+        const loginTicket = signLoginTicket(fresh.id);
+        res.json({
+          requiresWebAuthn: true,
+          loginTicket,
+          userId: fresh.id,
+          hasRecoveryCodes: Boolean(fresh.recoveryCodesHash),
+          reason: 'new_device',
         });
-    if (!skipFido && (fresh.fido2Enforced || credCount > 0)) {
-      const loginTicket = signLoginTicket(fresh.id);
-      res.json({
-        requiresWebAuthn: true,
-        loginTicket,
-        userId: fresh.id,
-        hasRecoveryCodes: Boolean(fresh.recoveryCodesHash),
+        return;
+      }
+      await prisma.trustedLoginDevice.update({
+        where: { id: known.id },
+        data: { lastSeenAt: new Date() },
       });
-      return;
     }
 
     const token = signToken({
@@ -406,6 +440,9 @@ router.post('/login/webauthn/options', async (req: Request, res: Response, next:
 router.post('/login/webauthn/verify', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const ticket = String((req.body ?? {}).loginTicket || '');
+    const deviceInstallId = String(
+      (req.body ?? {}).deviceInstallId || '',
+    ).trim().slice(0, 128);
     const { sub: userId } = verifyLoginTicket(ticket);
     const expectedChallenge = loginChallenges.get(userId);
     if (!expectedChallenge) {
@@ -441,6 +478,9 @@ router.post('/login/webauthn/verify', async (req: Request, res: Response, next: 
       where: { id: cred.id },
       data: { counter: verification.authenticationInfo.newCounter },
     });
+    if (deviceInstallId) {
+      await trustLoginDevice(userId, deviceInstallId, 'fido2-login');
+    }
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       res.status(404).json({ error: 'User not found' });
@@ -461,6 +501,9 @@ router.post('/login/recovery', async (req: Request, res: Response, next: NextFun
   try {
     const ticket = String((req.body ?? {}).loginTicket || '');
     const code = String((req.body ?? {}).code || '').trim().toLowerCase();
+    const deviceInstallId = String(
+      (req.body ?? {}).deviceInstallId || '',
+    ).trim().slice(0, 128);
     const { sub: userId } = verifyLoginTicket(ticket);
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user?.recoveryCodesHash) {
@@ -484,6 +527,9 @@ router.post('/login/recovery', async (req: Request, res: Response, next: NextFun
       where: { id: userId },
       data: { recoveryCodesHash: JSON.stringify(hashes) },
     });
+    if (deviceInstallId) {
+      await trustLoginDevice(userId, deviceInstallId, 'recovery');
+    }
     const token = signToken({
       id: user.id,
       email: user.email,

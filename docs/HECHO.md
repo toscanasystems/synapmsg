@@ -25,9 +25,23 @@ Privado 1:1 Toscana SM-A356E (`RFCX41A9NQL`) ↔ Samsung SM-A566E (`R5CYA03YERH`
 
 ### Todavía no (no afirmar en marketing)
 
-- FIDO2 / llaves físicas, KTL, Dead Man’s Switch, StrongBox como paquete cerrado.
+- KTL auditable por el usuario, Dead Man’s Switch, StrongBox como paquete cerrado.
 - Grupos E2E con libsignal; verificación QR escaneada en APK de release.
 - Llamadas, canales, archivos grandes como promesas cerradas.
+
+## 2026-11-12 — Fase 5.1 FIDO2 (aparato nuevo)
+
+### Demostrado
+
+API `api.synapmsg.ai` + Chromium WebAuthn virtual (Playwright). Cuenta Toscana `47-2967-9274`.
+
+1. Sin llave enrolada → login con contraseña como siempre.
+2. Con llave enrolada + `deviceInstallId` desconocido → `requiresWebAuthn` / `reason: new_device` (sin token).
+3. Tras assertion FIDO2 en `/security/login-fido2.html` → token + fila en `trusted_login_devices`; el mismo aparato vuelve a entrar sin pedir llave.
+
+### Todavía no
+
+- Prueba manual con YubiKey USB en pantalla del Samsung (el lab usó autenticador virtual CTAP2).
 
 ## 2026-11-12 — Fase 3 (ML Kit on-device, chat Privado)
 

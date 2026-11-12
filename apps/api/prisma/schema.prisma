@@ -51,6 +51,7 @@ model User {
   scheduledMessages  ScheduledMessage[]
   glossaryEntries    GlossaryEntry[]
   devices            DeviceIdentity[]
+  trustedLoginDevices TrustedLoginDevice[]
   ownedBots          Bot[]               @relation("BotOwner")
   botIdentity        Bot?                @relation("BotIdentity")
 
@@ -153,6 +154,22 @@ model WebAuthnCredential {
 
   @@index([userId])
   @@map("webauthn_credentials")
+}
+
+/// Installations that already passed FIDO2 (or first enroll). New phones must assert again.
+model TrustedLoginDevice {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @db.Uuid
+  deviceInstallId String
+  label           String   @default("")
+  createdAt       DateTime @default(now())
+  lastSeenAt      DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceInstallId])
+  @@index([userId])
+  @@map("trusted_login_devices")
 }
 
 model GlossaryEntry {

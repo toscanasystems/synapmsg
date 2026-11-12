@@ -136,13 +136,32 @@ export default function App(): JSX.Element {
     })();
   }, [hydrate, hydratePrefs, hydrateLock, hydrateHidden]);
 
-  // Fase 4 prove deep link: synapmsg://prove/phase4?pin=2468&duress=1357
+  // Fase 4 prove + FIDO2 return: synapmsg://prove/phase4… · synapmsg://auth/fido2?token=
   useEffect(() => {
     const run = (url: string | null) => {
+      if (!url) return;
+      if (url.startsWith('synapmsg://auth/fido2')) {
+        void (async () => {
+          try {
+            const q = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
+            const params = new URLSearchParams(q);
+            const token = params.get('token');
+            const userRaw = params.get('user');
+            if (!token || !userRaw) return;
+            const user = JSON.parse(decodeURIComponent(userRaw)) as import('./src/types').User;
+            await useAuthStore.getState().adoptSession(token, user);
+          } catch (err) {
+            Alert.alert(
+              'FIDO2',
+              err instanceof Error ? err.message : 'No se pudo completar el login',
+            );
+          }
+        })();
+        return;
+      }
       void import('./src/security/provePhase4').then(async (m) => {
         const parsed = m.parsePhase4ProveUrl(url);
         if (!parsed) return;
-        // Wait for auth hydrate.
         for (let i = 0; i < 40; i++) {
           if (useAuthStore.getState().isHydrated) break;
           await new Promise((r) => setTimeout(r, 250));

@@ -378,6 +378,28 @@ router.post(
           label,
         },
       });
+      // Enrolment device becomes trusted so this phone is not locked out next login.
+      const deviceInstallId = String(
+        (req.body as { deviceInstallId?: string }).deviceInstallId || '',
+      )
+        .trim()
+        .slice(0, 128);
+      if (deviceInstallId) {
+        await prisma.trustedLoginDevice.upsert({
+          where: {
+            userId_deviceInstallId: {
+              userId: req.user!.id,
+              deviceInstallId,
+            },
+          },
+          create: {
+            userId: req.user!.id,
+            deviceInstallId,
+            label: 'enroll',
+          },
+          update: { lastSeenAt: new Date() },
+        });
+      }
       res.json({ ok: true, credentialId: credential.id, label });
     } catch (err) {
       next(err);
