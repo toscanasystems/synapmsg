@@ -643,7 +643,47 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
   },
 
   editMessage: async (chatId, messageId, text) => {
-    const updated = await messagesApi.edit(chatId, messageId, text);
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const me = useAuthStore.getState().user;
+    const chat = get().chats.find((c) => c.id === chatId);
+    const e2e = chat?.encryptionMode === 'e2e';
+    let updated;
+    if (e2e && me) {
+      const others = otherParticipantIds(chat, me.id);
+      if (chat?.type === 'group' && others.length > 0) {
+        const recipientEnvelopes = [];
+        for (const uid of others) {
+          const enc = await encryptMessageForPeer(uid, trimmed);
+          recipientEnvelopes.push({
+            recipientUserId: uid,
+            ciphertext: enc.ciphertext,
+            ciphertextType: enc.ciphertextType,
+          });
+        }
+        updated = await messagesApi.edit(chatId, messageId, {
+          ciphertext: recipientEnvelopes[0]?.ciphertext,
+          ciphertextType: recipientEnvelopes[0]?.ciphertextType,
+          recipientEnvelopes,
+        });
+      } else {
+        const peerId = peerIdForChat(chat, me.id);
+        if (!peerId) throw new Error('Sin destinatario para editar E2E');
+        const enc = await encryptMessageForPeer(peerId, trimmed);
+        updated = await messagesApi.edit(chatId, messageId, {
+          ciphertext: enc.ciphertext,
+          ciphertextType: enc.ciphertextType,
+        });
+      }
+      get().applyEditedMessage({
+        ...updated,
+        originalText: trimmed,
+        translatedText: trimmed,
+        editedAt: updated.editedAt || new Date().toISOString(),
+      });
+      return;
+    }
+    updated = await messagesApi.edit(chatId, messageId, trimmed);
     get().applyEditedMessage(updated);
   },
 

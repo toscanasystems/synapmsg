@@ -3,6 +3,19 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-12 — Fase 6.4 Editar mensaje (48 h)
+
+### Demostrado
+
+API `proof-edit-48h.js` → `ok:true`. Chat Nube Toscana↔Samsung.
+
+1. Enviar texto; PATCH dentro de 48 h → `originalText` nuevo + `editedAt` set.
+2. UI marca «editado»; E2E reenvía ciphertext (sin texto plano al servidor).
+
+### Todavía no
+
+- Edición E2E comprobada visualmente en dos APK.
+
 ## 2026-11-12 — Fase 6.3 Fotos/archivos cifrados al salir del teléfono
 
 ### Demostrado

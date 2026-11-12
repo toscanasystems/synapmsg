@@ -64,9 +64,8 @@ function formatTime(iso: string): string {
 
 function canEdit(message: Message, isMine: boolean): boolean {
   if (!isMine || message.deletedAt) return false;
-  // E2E: no server-side plaintext edit path
-  if (message.isE2e) return false;
-  if (message.mediaType && message.mediaType !== 'image') return false;
+  // Media captions with seal meta: text-only edits (no re-upload) for plain text.
+  if (message.mediaType && message.mediaUrl) return false;
   const age = Date.now() - new Date(message.createdAt).getTime();
   return age <= EDIT_WINDOW_MS;
 }

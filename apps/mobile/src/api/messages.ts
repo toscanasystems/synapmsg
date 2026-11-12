@@ -53,10 +53,27 @@ export const messagesApi = {
     return data.scheduled;
   },
 
-  async edit(chatId: string, messageId: string, text: string): Promise<Message> {
+  async edit(
+    chatId: string,
+    messageId: string,
+    payload:
+      | string
+      | {
+          text?: string;
+          ciphertext?: string;
+          ciphertextType?: number;
+          recipientEnvelopes?: Array<{
+            recipientUserId: string;
+            ciphertext: string;
+            ciphertextType?: number;
+          }>;
+        },
+  ): Promise<Message> {
+    const body =
+      typeof payload === 'string' ? { text: payload } : payload;
     const { data } = await apiClient.patch<{ message: Message }>(
       `/chats/${chatId}/messages/${messageId}`,
-      { text },
+      body,
     );
     return data.message;
   },

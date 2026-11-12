@@ -323,13 +323,15 @@ router.patch(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { chatId, messageId } = req.params;
-      const { text } = (req.body ?? {}) as { text?: unknown };
+      const { text, ciphertext, ciphertextType, recipientEnvelopes } = (req.body ??
+        {}) as {
+        text?: unknown;
+        ciphertext?: unknown;
+        ciphertextType?: unknown;
+        recipientEnvelopes?: unknown;
+      };
       if (!chatId || !messageId) {
         res.status(400).json({ error: 'chatId and messageId are required' });
-        return;
-      }
-      if (typeof text !== 'string' || !text.trim()) {
-        res.status(400).json({ error: 'text is required' });
         return;
       }
 
@@ -360,15 +362,99 @@ router.patch(
         res.status(400).json({ error: 'Cannot edit a deleted message' });
         return;
       }
-      if (msg.isE2e || msg.chat.encryptionMode === 'e2e') {
-        res.status(400).json({
-          error:
-            'Los mensajes Privados no se editan por API de texto plano (el servidor no guarda el cuerpo legible).',
-        });
-        return;
-      }
       if (Date.now() - msg.createdAt.getTime() > EDIT_WINDOW_MS) {
         res.status(400).json({ error: 'Edit window is 48 hours' });
+        return;
+      }
+
+      const e2eEdit = msg.isE2e || msg.chat.encryptionMode === 'e2e';
+      const envelopes = Array.isArray(recipientEnvelopes)
+        ? recipientEnvelopes
+            .filter(
+              (
+                e,
+              ): e is {
+                recipientUserId: string;
+                ciphertext: string;
+                ciphertextType?: number;
+              } =>
+                Boolean(
+                  e &&
+                    typeof e === 'object' &&
+                    typeof (e as { recipientUserId?: unknown }).recipientUserId ===
+                      'string' &&
+                    typeof (e as { ciphertext?: unknown }).ciphertext === 'string',
+                ),
+            )
+            .slice(0, 49)
+        : [];
+      const hasCipher =
+        typeof ciphertext === 'string' && ciphertext.trim().length >= 16;
+
+      if (e2eEdit) {
+        if (!hasCipher && envelopes.length === 0) {
+          res.status(400).json({
+            error:
+              'Edición Privada: envía ciphertext (o recipientEnvelopes), no texto plano.',
+          });
+          return;
+        }
+        const primary =
+          hasCipher
+            ? String(ciphertext).trim()
+            : envelopes[0]!.ciphertext.trim();
+        const primaryType =
+          typeof ciphertextType === 'number'
+            ? ciphertextType
+            : typeof envelopes[0]?.ciphertextType === 'number'
+              ? envelopes[0]!.ciphertextType!
+              : 3;
+        const updated = await prisma.message.update({
+          where: { id: messageId },
+          data: {
+            originalText: '',
+            translatedText: null,
+            isTranslated: false,
+            ciphertext: primary,
+            ciphertextType: primaryType,
+            isE2e: true,
+            editedAt: new Date(),
+          },
+          include: {
+            sender: { select: { id: true, username: true, name: true } },
+            reactions: { select: { emoji: true, userId: true } },
+          },
+        });
+        if (envelopes.length > 0) {
+          await prisma.messageRecipientCipher.deleteMany({
+            where: { messageId },
+          });
+          await prisma.messageRecipientCipher.createMany({
+            data: envelopes.map((e) => ({
+              messageId,
+              recipientUserId: e.recipientUserId,
+              ciphertext: e.ciphertext.trim(),
+              ciphertextType:
+                typeof e.ciphertextType === 'number' ? e.ciphertextType : 3,
+            })),
+          });
+        }
+        const wire = await serializeDbMessage(updated, req.user!.id);
+        const { sendToUser } = await import('./websocket');
+        for (const part of msg.chat.participants) {
+          const viewerWire = await serializeDbMessage(updated, part.userId);
+          sendToUser(part.userId, {
+            type: 'message_edited',
+            chatId,
+            message: viewerWire,
+          });
+        }
+        res.json({ message: wire });
+        return;
+      }
+
+      if (typeof text !== 'string' || !text.trim()) {
+        res.status(400).json({ error: 'text is required' });
         return;
       }
 
