@@ -9,15 +9,17 @@ Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
 API `api.synapmsg.ai`, script `apps/api/scripts/proof-ws-reconnect-catchup.js` → `ok:true`.
 
-1. Dos clientes WS (cuentas Toscana `4729679274` y Samsung `7751806459`) conectados; `railway restart -y`.
+**Importante:** la prueba se hizo con **dos clientes WebSocket en la computadora** (Node/`ws`), no con dos teléfonos físicos. Las cuentas usadas fueron Toscana `4729679274` y Samsung `7751806459` (solo identidad en el servidor).
+
+1. Dos clientes WS en la PC conectados; `railway restart -y`.
 2. Ambos vuelven a conectar solos con backoff 1→2→4→8 s.
 3. Mensaje enviado en el reinicio; al volver, el receptor lo obtiene por REST (`fetchMessages` / lista) — `bSawViaRest: true`.
-4. App: `WebSocketManager` ya tenía ese backoff; `catchUpAfterReconnect` + `activeChatId` en ChatScreen para no saltar mensajes ni salir del chat abierto.
+4. Código en la app (aún sin prueba en dos APK): `WebSocketManager` con ese backoff; `catchUpAfterReconnect` + `activeChatId` en ChatScreen.
 
 ### Todavía no
 
-- Prueba visual en **dos APK físicos** a la vez (solo Toscana USB conectado; Samsung no estaba en `adb devices`). El script usó dos clientes WS, no la UI del teléfono.
-- El catch-up nuevo en mobile requiere APK nuevo instalado.
+- **Dos teléfonos físicos** abiertos en un chat Privado durante un reinicio de Railway (Samsung no estaba en `adb devices` en esa sesión). Queda pendiente conectar el Samsung y repetir la 7.3 entre Toscana y Samsung.
+- Catch-up nuevo instalado en APK de release en ambos aparatos.
 
 ## 2026-11-12 — Fase 7.2 Límite de intentos (login / registro)
 
