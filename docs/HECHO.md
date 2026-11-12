@@ -25,9 +25,24 @@ Privado 1:1 Toscana SM-A356E (`RFCX41A9NQL`) ↔ Samsung SM-A566E (`R5CYA03YERH`
 
 ### Todavía no (no afirmar en marketing)
 
-- KTL auditable por el usuario, Dead Man’s Switch, StrongBox como paquete cerrado.
+- Dead Man’s Switch, StrongBox como paquete cerrado.
 - Grupos E2E con libsignal; verificación QR escaneada en APK de release.
 - Llamadas, canales, archivos grandes como promesas cerradas.
+
+## 2026-11-12 — Fase 5.2 Registro público de claves (KTL)
+
+### Demostrado
+
+API `api.synapmsg.ai`, cuenta Toscana `47-2967-9274` (`49d6d7ba-…`). Script `apps/api/scripts/proof-ktl-manual-change.js` → `ok:true`.
+
+1. Publicar identidad actual → seq 1.
+2. Cambiar a mano `device_identities.identityKeyPub` y republicar → seq 2 con llave distinta.
+3. `GET /security/ktl/public/:userId` muestra las dos entradas y la rotación (`showsManualChange: true`).
+4. App: aviso «llave cambió» / Confío incluye resumen del registro público; Ajustes → «Registro público de claves» y «Cambios de llave» consultan el mismo log.
+
+### Todavía no
+
+- Auditoría Merkle completa / CONIKS con prueba de inclusión en cliente.
 
 ## 2026-11-12 — Fase 5.1 FIDO2 (aparato nuevo)
 

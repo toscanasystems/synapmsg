@@ -211,9 +211,19 @@ export function ChatScreen(): JSX.Element {
       try {
         await getPeerIdentityPub(otherUserId);
         if (consumeKeyChanged(otherUserId)) {
+          let ktlLine = '';
+          try {
+            const { describePeerKtl } = await import('../crypto/ktlPublish');
+            ktlLine = await describePeerKtl(otherUserId);
+          } catch {
+            /* optional */
+          }
           Alert.alert(
             'Clave cambiada',
-            'Key Transparency detectó un cambio en la identidad E2E del contacto. Verifica el código de seguridad.',
+            (ktlLine
+              ? `${ktlLine}\n\n`
+              : 'Key Transparency detectó un cambio en la identidad E2E del contacto. ') +
+              'Verifica el código de seguridad.',
           );
         }
       } catch {

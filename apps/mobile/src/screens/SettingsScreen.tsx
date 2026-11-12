@@ -1028,7 +1028,8 @@ export function SettingsScreen(): JSX.Element {
                 : `${identityLog.length} registro(s) · último: ${identityLog[0]?.peerLabel ?? ''}`
             }
             onPress={() => {
-              void loadIdentityChangeLog().then((entries) => {
+              void (async () => {
+                const entries = await loadIdentityChangeLog();
                 setIdentityLog(entries);
                 if (entries.length === 0) {
                   Alert.alert(
@@ -1037,16 +1038,18 @@ export function SettingsScreen(): JSX.Element {
                   );
                   return;
                 }
-                const body = entries
-                  .slice(0, 12)
-                  .map((e) => {
-                    const when = new Date(e.at).toLocaleString();
-                    const decision = e.trusted ? 'Confío' : 'No enviar';
-                    return `${when}\n${e.peerLabel} · ${decision}\nllave ${e.newKeyPrefix}…`;
-                  })
-                  .join('\n\n');
-                Alert.alert('Cambios de llave', body);
-              });
+                const { describePeerKtl } = await import('../crypto/ktlPublish');
+                const chunks: string[] = [];
+                for (const e of entries.slice(0, 8)) {
+                  const when = new Date(e.at).toLocaleString();
+                  const decision = e.trusted ? 'Confío' : 'No enviar';
+                  const ktl = await describePeerKtl(e.peerUserId);
+                  chunks.push(
+                    `${when}\n${e.peerLabel} · ${decision}\nllave ${e.newKeyPrefix}…\n${ktl}`,
+                  );
+                }
+                Alert.alert('Cambios de llave', chunks.join('\n\n'));
+              })();
             }}
           />
           {lockEnabled ? (
@@ -1162,23 +1165,44 @@ export function SettingsScreen(): JSX.Element {
           <SettingsRow
             icon="git-branch"
             iconBg="#30B0B0"
-            title="Key Transparency"
-            subtitle="Publicar identidad en log auditable"
+            title="Registro público de claves"
+            subtitle="Ver historial KTL y publicar identidad"
             onPress={() => {
-              void securityApi
-                .publishKtl()
-                .then((e) =>
+              void (async () => {
+                const me = useAuthStore.getState().user;
+                if (!me?.id) {
+                  Alert.alert('KTL', 'Inicia sesión primero.');
+                  return;
+                }
+                try {
+                  await publishKtlIfNeeded();
+                  const entries = await securityApi.getKtlPublic(me.id);
+                  if (entries.length === 0) {
+                    Alert.alert(
+                      'Registro público',
+                      'Sin entradas. Publica tras registrar el dispositivo E2E.',
+                    );
+                    return;
+                  }
+                  const lines = entries.map((e, i) => {
+                    const prev = i > 0 ? entries[i - 1] : null;
+                    const rotated =
+                      prev && prev.identityKeyPub !== e.identityKeyPub
+                        ? ' · CAMBIÓ'
+                        : '';
+                    return `#${e.seq} ${new Date(e.at).toLocaleString()}${rotated}\n${e.identityKeyPub.slice(0, 20)}…`;
+                  });
                   Alert.alert(
-                    'KTL',
-                    `Publicado seq=${e.seq}\n${e.hash.slice(0, 24)}…`,
-                  ),
-                )
-                .catch(() =>
+                    'Registro público de claves',
+                    lines.slice(-12).join('\n\n'),
+                  );
+                } catch {
                   Alert.alert(
                     'KTL',
                     'Registra el dispositivo E2E antes de publicar.',
-                  ),
-                );
+                  );
+                }
+              })();
             }}
           />
           <SettingsRow

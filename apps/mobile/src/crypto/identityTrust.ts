@@ -155,15 +155,23 @@ export function promptIdentityTrust(opts: {
   promptsInFlight.add(peerUserId);
 
   setTimeout(() => {
-    // Re-check: a parallel Confío may have completed while we waited.
-    if (userTrustedPeers.has(peerUserId)) {
-      promptsInFlight.delete(peerUserId);
-      return;
-    }
-    Alert.alert(
-      'Llave de seguridad',
-      `La llave de seguridad de ${peerLabel} cambió. ¿Confías en este teléfono?`,
-      [
+    void (async () => {
+      // Re-check: a parallel Confío may have completed while we waited.
+      if (userTrustedPeers.has(peerUserId)) {
+        promptsInFlight.delete(peerUserId);
+        return;
+      }
+      let ktlLine = '';
+      try {
+        const { describePeerKtl } = await import('./ktlPublish');
+        ktlLine = await describePeerKtl(peerUserId);
+      } catch {
+        /* optional */
+      }
+      const body =
+        `La llave de seguridad de ${peerLabel} cambió. ¿Confías en este teléfono?` +
+        (ktlLine ? `\n\n${ktlLine}` : '');
+      Alert.alert('Llave de seguridad', body, [
         {
           text: 'No enviar',
           style: 'cancel',
@@ -196,7 +204,9 @@ export function promptIdentityTrust(opts: {
                 );
                 Alert.alert(
                   'Error',
-                  err instanceof Error ? err.message : 'No se pudo guardar la llave',
+                  err instanceof Error
+                    ? err.message
+                    : 'No se pudo guardar la llave',
                 );
               } finally {
                 promptsInFlight.delete(peerUserId);
@@ -204,8 +214,7 @@ export function promptIdentityTrust(opts: {
             })();
           },
         },
-      ],
-      { cancelable: false },
-    );
+      ], { cancelable: false });
+    })();
   }, 320);
 }
