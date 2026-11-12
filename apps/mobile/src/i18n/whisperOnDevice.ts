@@ -4,7 +4,7 @@
  */
 
 import * as FileSystem from 'expo-file-system';
-import { translateOnDevice, OnDeviceLang } from './onDeviceTranslate';
+/** Whisper is ASR only — never use it (or the legacy dictionary) for Private MT. */
 
 const MODEL_DIR = `${FileSystem.documentDirectory ?? ''}whisper/`;
 const MODEL_FILE = `${MODEL_DIR}ggml-tiny.bin`;
@@ -59,12 +59,11 @@ export async function ensureWhisperModel(): Promise<boolean> {
 }
 
 /**
- * Transcribe audio on-device then optionally translate with local dictionary.
- * Never uploads audio/plaintext to cloud.
+ * Transcribe audio on-device only. Translation for Private chats is ML Kit elsewhere.
  */
 export async function whisperTranscribeAndTranslate(
   audioUri: string,
-  targetLang: OnDeviceLang,
+  _targetLang?: string,
 ): Promise<{ text: string; translated: string; via: string } | null> {
   await ensureWhisperModel();
   if (!nativeTranscribe) {
@@ -72,8 +71,7 @@ export async function whisperTranscribeAndTranslate(
   }
   const text = await nativeTranscribe(audioUri);
   if (!text) return null;
-  const translated = translateOnDevice(text, targetLang);
-  return { text, translated, via: 'whisper.cpp+on-device-mt' };
+  return { text, translated: text, via: 'whisper.cpp-asr-only' };
 }
 
 export const WHISPER_STATUS = {

@@ -12,7 +12,12 @@
   {
     title: "Traducción en la nube",
     description:
-      "12 idiomas: español, inglés, portugués, francés, italiano, alemán, chino, japonés, coreano, árabe, ruso e hindi. Eso es la traducción en la nube (chat Nube), no la traducción dentro del teléfono — esa todavía no está lista.",
+      "12 idiomas: español, inglés, portugués, francés, italiano, alemán, chino, japonés, coreano, árabe, ruso e hindi. Eso es la traducción en la nube (chat Nube).",
+  },
+  {
+    title: "Traducción en el teléfono (Privado)",
+    description:
+      "En chat Privado, ML Kit traduce en el aparato. Probado en dispositivo: inglés y español. Se baja una vez; después no sale del teléfono.",
   },
   {
     title: "Cuenta sin SIM",

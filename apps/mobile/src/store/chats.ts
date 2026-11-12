@@ -31,7 +31,7 @@ import {
   decryptMessageFromPeer,
   encryptMessageForPeer,
 } from '../crypto/e2eSession';
-import { applyOnDeviceIfNeeded } from '../i18n/onDeviceTranslate';
+import { applyPrivateOnDeviceMt } from '../i18n/privateOnDeviceMt';
 
 interface ChatsState {
   chats: Chat[];
@@ -109,11 +109,12 @@ async function maybeDecryptMessage(
     }
   }
   const me = useAuthStore.getState().user;
-  return applyOnDeviceIfNeeded(
+  // Private only: ML Kit on-device. Cloud keeps DeepL on the server — do not run MT here.
+  if (!next.isE2e) return next;
+  return applyPrivateOnDeviceMt(
     next,
     me?.preferredLanguage || 'es',
     me?.id,
-    me?.preferredTranslateMode,
   );
 }
 

@@ -15,8 +15,8 @@ export function TranslationDemo() {
             <p className="text-lg text-gray-300 mb-8 leading-relaxed">
               En un chat Nube escribes en tu idioma; el servidor puede traducir al del
               destinatario. 12 idiomas: español, inglés, portugués, francés, italiano,
-              alemán, chino, japonés, coreano, árabe, ruso e hindi. Eso es traducción en
-              la nube — la traducción dentro del teléfono todavía no está lista.
+              alemán, chino, japonés, coreano, árabe, ruso e hindi. En chat Privado,
+              la traducción corre en el teléfono (probado: inglés y español).
             </p>
 
             <ul className="space-y-4">

@@ -1,11 +1,13 @@
 /**
- * On-device translation — no network.
- * Phrase + word dictionary (ES↔EN/PT) + user glossary.
- * E2E chats always use this path for inbound MT (never upload plaintext to DeepL).
+ * LEGACY phrase dictionary — DISABLED for new Private chats (Fase 3).
+ * New Private MT uses ML Kit via privateOnDeviceMt.ts.
+ * Kept only so old call sites / voice stubs can import types without pretending
+ * this dictionary is a model.
  *
- * Coverage honesty: local dictionary ES/EN/PT only. Product on-device path
- * for Private chats is not claimed ready yet (see docs/HECHO.md).
+ * Do NOT use applyOnDeviceIfNeeded for new Private encrypt/decrypt paths.
  */
+export const LEGACY_DICTIONARY_DISABLED_FOR_NEW = true as const;
+
 
 import { applyGlossary, getGlossaryCache } from './glossaryCache';
 
@@ -172,44 +174,10 @@ export function translateOnDevice(
 }
 
 /**
- * Apply local MT when:
- * - user chose on-device mode, OR
- * - message is E2E (cloud never saw plaintext — always try local dict)
+ * @deprecated Fase 3 — Private chats use ML Kit (privateOnDeviceMt).
+ * This no-ops so the dictionary is never treated as a model for new paths.
  */
-export function applyOnDeviceIfNeeded<
-  T extends {
-    originalText: string;
-    translatedText: string;
-    translatedLanguage: string | null;
-    isTranslated?: boolean;
-    isE2e?: boolean;
-    senderId: string;
-  },
->(
-  msg: T,
-  preferredLang: string,
-  myUserId: string | undefined,
-  mode: 'cloud' | 'on-device' | undefined,
-): T {
-  if (!myUserId || msg.senderId === myUserId) return msg;
-
-  const e2e = Boolean(msg.isE2e);
-  const forceLocal = mode === 'on-device' || e2e;
-  if (!forceLocal) return msg;
-
-  const needs =
-    e2e ||
-    !msg.isTranslated ||
-    msg.translatedText === msg.originalText ||
-    !msg.translatedText;
-  if (!needs) return msg;
-
-  const hit = translateOnDevice(msg.originalText, preferredLang, null);
-  if (!hit) return msg;
-  return {
-    ...msg,
-    translatedText: hit.text,
-    translatedLanguage: hit.language,
-    isTranslated: true,
-  };
+export function applyOnDeviceIfNeeded<T>(msg: T): T {
+  if (LEGACY_DICTIONARY_DISABLED_FOR_NEW) return msg;
+  return msg;
 }

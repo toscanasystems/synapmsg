@@ -60,6 +60,13 @@ import {
 import { SQLCIPHER_STATUS } from '../security/sqlcipherStore';
 import { sqlCipherNativeStatus } from 'synap-sqlcipher';
 import { libsignalNativeStatus } from 'synap-libsignal';
+import {
+  mlkitAvailable,
+  mlkitDownloadModel,
+  mlkitEngine,
+  mlkitIsModelDownloaded,
+} from 'synap-mlkit-translate';
+import { PRIVATE_GLOSSARY_MAX } from '../i18n/privateOnDeviceMt';
 
 const NOTIF_KEY = '@Synap/notifications_enabled';
 const READ_KEY = '@Synap/read_receipts';
@@ -676,8 +683,8 @@ export function SettingsScreen(): JSX.Element {
             title="Traducción en la nube"
             subtitle={
               translateModeIsCloud
-                ? 'DeepL cloud. En E2E se usa diccionario local (sin subir texto).'
-                : 'On-device ES/EN/PT. E2E nunca va a DeepL.'
+                ? 'DeepL solo en chat Nube. Privado = ML Kit en el teléfono.'
+                : 'Preferencia local. Privado siempre traduce en el teléfono (ML Kit).'
             }
             right={
               <Switch
@@ -687,7 +694,55 @@ export function SettingsScreen(): JSX.Element {
                 thumbColor="#fff"
               />
             }
+          />
+          <SettingsRow
+            icon="download-cloud"
+            iconBg="#30B0B0"
+            title="Idiomas en el teléfono (ML Kit)"
+            subtitle="Se baja una vez. Después no sale del teléfono."
             last
+            onPress={() => {
+              if (!mlkitAvailable()) {
+                Alert.alert(
+                  'ML Kit',
+                  'Hace falta un development build (expo run:android). No funciona en Expo Go.',
+                );
+                return;
+              }
+              const eng = mlkitEngine();
+              Alert.alert(
+                'Bajar idioma',
+                `Motor: ${eng.name} (${eng.platform}). Se baja una vez. Después no sale del teléfono.\nElegí un idioma:`,
+                [
+                  ...(['es', 'en', 'pt', 'fr', 'de', 'it'] as const).map((code) => ({
+                    text: code,
+                    onPress: () => {
+                      void (async () => {
+                        try {
+                          const already = await mlkitIsModelDownloaded(code);
+                          if (already) {
+                            Alert.alert('ML Kit', `“${code}” ya está en el teléfono.`);
+                            return;
+                          }
+                          Alert.alert('ML Kit', `Bajando “${code}”…`);
+                          await mlkitDownloadModel(code);
+                          Alert.alert(
+                            'ML Kit',
+                            `“${code}” listo. Se baja una vez. Después no sale del teléfono.`,
+                          );
+                        } catch (err) {
+                          Alert.alert(
+                            'ML Kit',
+                            err instanceof Error ? err.message : 'No se pudo bajar',
+                          );
+                        }
+                      })();
+                    },
+                  })),
+                  { text: 'Cancelar', style: 'cancel' },
+                ],
+              );
+            }}
           />
         </View>
 
@@ -699,8 +754,8 @@ export function SettingsScreen(): JSX.Element {
             title="Glosario personalizado"
             subtitle={
               glossary.length
-                ? `${glossary.length} término(s)`
-                : 'Forzar traducciones (nombres, marcas)'
+                ? `${Math.min(glossary.length, PRIVATE_GLOSSARY_MAX)}/${PRIVATE_GLOSSARY_MAX} (no se traducen)`
+                : `Hasta ${PRIVATE_GLOSSARY_MAX} palabras que no se traducen`
             }
             onPress={() => {
               setGlossaryOpen(true);
@@ -1323,20 +1378,20 @@ export function SettingsScreen(): JSX.Element {
           >
             <Text style={styles.modalTitle}>Glosario</Text>
             <Text style={styles.glossaryHint}>
-              Al traducir, estas palabras se fuerzan a tu versión (nombres,
-              marcas, jerga).
+              Hasta {PRIVATE_GLOSSARY_MAX} palabras que no se traducen (nombres,
+              jerga). En Privado se dejan igual.
             </Text>
             <TextInput
               value={gSource}
               onChangeText={setGSource}
-              placeholder="Original (ej. Synap)"
+              placeholder="Palabra (ej. Synap)"
               placeholderTextColor={colors.textSecondary}
               style={styles.nameInput}
             />
             <TextInput
               value={gTarget}
               onChangeText={setGTarget}
-              placeholder="Traducción forzada"
+              placeholder="Igual que arriba (queda sin traducir)"
               placeholderTextColor={colors.textSecondary}
               style={[styles.nameInput, { marginTop: spacing.sm }]}
             />
@@ -1344,12 +1399,18 @@ export function SettingsScreen(): JSX.Element {
               style={styles.glossaryAdd}
               onPress={() => {
                 void (async () => {
-                  if (!gSource.trim() || !gTarget.trim()) return;
-                  try {
-                    const entry = await usersApi.addGlossary(
-                      gSource.trim(),
-                      gTarget.trim(),
+                  const src = gSource.trim();
+                  if (!src) return;
+                  const tgt = gTarget.trim() || src;
+                  if (glossary.length >= PRIVATE_GLOSSARY_MAX) {
+                    Alert.alert(
+                      'Glosario',
+                      `Máximo ${PRIVATE_GLOSSARY_MAX} palabras.`,
                     );
+                    return;
+                  }
+                  try {
+                    const entry = await usersApi.addGlossary(src, tgt);
                     setGlossary((prev) => [
                       entry,
                       ...prev.filter((e) => e.id !== entry.id),

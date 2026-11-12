@@ -27,10 +27,10 @@ export function TranslationBadge({
       onPress={onPress}
       style={({ pressed }) => [styles.badge, pressed && styles.pressed, style]}
       accessibilityRole="button"
-      accessibilityLabel={`Traducido del ${label}. Toca para ver el original.`}
+      accessibilityLabel={`Traducido de ${label}. Toca para ver el original.`}
     >
       <Text style={styles.text}>
-        {flag} Traducido del {label}
+        {flag} Traducido de {label}
       </Text>
       <Text style={styles.cta}>Ver original ›</Text>
     </Pressable>

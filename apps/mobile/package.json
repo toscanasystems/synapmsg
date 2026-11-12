@@ -41,6 +41,7 @@
     "react-native-webview": "13.8.6",
     "synap-enclave": "file:./modules/synap-enclave",
     "synap-libsignal": "file:./modules/synap-libsignal",
+    "synap-mlkit-translate": "file:modules/synap-mlkit-translate",
     "synap-sqlcipher": "file:./modules/synap-sqlcipher",
     "tweetnacl": "^1.0.3",
     "zustand": "^4.5.4"

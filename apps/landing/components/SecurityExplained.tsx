@@ -9,7 +9,11 @@ const DEMOSTRADO = [
   },
   {
     title: "Traducción en la nube",
-    body: "12 idiomas: español, inglés, portugués, francés, italiano, alemán, chino, japonés, coreano, árabe, ruso e hindi. Es la traducción en la nube (chat Nube), no dentro del teléfono.",
+    body: "12 idiomas: español, inglés, portugués, francés, italiano, alemán, chino, japonés, coreano, árabe, ruso e hindi. Es la traducción en la nube (chat Nube).",
+  },
+  {
+    title: "Traducción en el teléfono (Privado)",
+    body: "ML Kit on-device. Probado: inglés y español. Se baja una vez; después no sale del teléfono. Sin DeepL en Privado.",
   },
   {
     title: "Cuenta sin SIM",
@@ -18,12 +22,10 @@ const DEMOSTRADO = [
 ];
 
 const TODAVIA_NO = [
-  "Protocolo Signal completo en producción.",
-  "Traducción dentro del teléfono para chats Privados.",
   "Wipe remoto, PIN de coacción y llaves físicas como paquete cerrado.",
+  "Más pares on-device que inglés↔español demostrados en dispositivo.",
   "Llamadas, grupos y archivos grandes como promesas cerradas.",
 ];
-
 export function SecurityExplained() {
   return (
     <section id="demostrado" className="bg-primary-soft py-24 border-t border-white/5">
