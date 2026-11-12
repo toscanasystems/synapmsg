@@ -15,10 +15,10 @@ Este archivo no duplica marketing. Si no está en `HECHO.md`, no está demostrad
 ## Todavía no (código puede existir; falta prueba en HECHO.md)
 
 - Signal / libsignal como protocolo de producción demostrado
-- Traducción on-device en Privado (sin DeepL) con prueba
+- Traducción dentro del teléfono en Privado (sin DeepL) con prueba
 - Wipe remoto, PIN de coacción, FIDO2, KTL, DMS, StrongBox como paquete cerrado
 - Llamadas E2E de media
-- “100+ idiomas”
+- Más idiomas que los 12 de traducción en la nube
 
 ## Autoridades
 

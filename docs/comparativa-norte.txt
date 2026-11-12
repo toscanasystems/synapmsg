@@ -9,10 +9,14 @@ DEMOSTRADO
 - JWT_SECRET obligatorio; sin clave de prueba en código.
 - Modo Nube: decisión explícita del usuario; servidor puede leer (aviso en app).
 
+DEMOSTRADO (nube)
+- Traducción en la nube (chat Nube): 12 idiomas — español, inglés, portugués,
+  francés, italiano, alemán, chino, japonés, coreano, árabe, ruso e hindi.
+  No es traducción dentro del teléfono.
+
 TODAVÍA NO (no afirmar en PDF/landing)
-- Signal Protocol / libsignal (reemplazo del ratchet propio).
-- Traducción on-device en Privado con prueba.
-- 100+ idiomas.
+- Signal Protocol completo en teléfonos de producción (prueba Node en HECHO Fase 2).
+- Traducción dentro del teléfono (Privado).
 - Wipe remoto + PIN de coacción + FIDO2 + KTL + DMS + StrongBox como paquete cerrado con prueba E2E.
 - Llamadas / grupos / canales / archivos grandes como promesas cerradas.
 - Tabla de paridad WhatsApp/Telegram/Signal/Zangi con filas no probadas.

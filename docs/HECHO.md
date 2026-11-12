@@ -23,8 +23,9 @@ Prueba: `cd packages/crypto && npm run prove:two-accounts` → `ok:true` (2026-1
 
 ### Todavía no (no afirmar en marketing)
 
-- Traducción on-device en el teléfono (Fase 3).
-- “100+ idiomas”.
+- Traducción dentro del teléfono (chats Privados).
+- Más idiomas que los 12 de la nube (español, inglés, portugués, francés,
+  italiano, alemán, chino, japonés, coreano, árabe, ruso e hindi).
 - Wipe remoto, PIN de coacción, FIDO2, KTL, Dead Man’s Switch, StrongBox
   como paquete demostrado de punta a punta.
 - Grupos E2E con libsignal; verificación QR escaneada en APK de release.

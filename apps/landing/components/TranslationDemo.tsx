@@ -13,9 +13,10 @@ export function TranslationDemo() {
               <span className="gradient-text">sin fricción</span>
             </h2>
             <p className="text-lg text-gray-300 mb-8 leading-relaxed">
-              Escribes en tu idioma nativo. Detectamos automáticamente el idioma del destinatario.
-              Traducimos en milisegundos antes de enviar. El receptor ve el mensaje en su idioma
-              con una etiqueta discreta.
+              En un chat Nube escribes en tu idioma; el servidor puede traducir al del
+              destinatario. 12 idiomas: español, inglés, portugués, francés, italiano,
+              alemán, chino, japonés, coreano, árabe, ruso e hindi. Eso es traducción en
+              la nube — la traducción dentro del teléfono todavía no está lista.
             </p>
 
             <ul className="space-y-4">

@@ -8,6 +8,10 @@ const DEMOSTRADO = [
     body: "Si lo elegís, el servidor sí puede leer y traducir ese chat. La app te avisa antes de activarlo.",
   },
   {
+    title: "Traducción en la nube",
+    body: "12 idiomas: español, inglés, portugués, francés, italiano, alemán, chino, japonés, coreano, árabe, ruso e hindi. Es la traducción en la nube (chat Nube), no dentro del teléfono.",
+  },
+  {
     title: "Cuenta sin SIM",
     body: "Podés registrarte con correo. Un Private Number virtual es opcional para que te encuentren solo si lo compartís.",
   },
@@ -15,8 +19,7 @@ const DEMOSTRADO = [
 
 const TODAVIA_NO = [
   "Protocolo Signal completo en producción.",
-  "Traducción en el teléfono para chats Privados.",
-  "Cientos de idiomas.",
+  "Traducción dentro del teléfono para chats Privados.",
   "Wipe remoto, PIN de coacción y llaves físicas como paquete cerrado.",
   "Llamadas, grupos y archivos grandes como promesas cerradas.",
 ];

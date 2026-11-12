@@ -3,19 +3,16 @@
  * Phrase + word dictionary (ES↔EN/PT) + user glossary.
  * E2E chats always use this path for inbound MT (never upload plaintext to DeepL).
  *
- * Coverage honesty: ES/EN/PT only. LatAm minority codes (qu/gn/quc) are UI stretch —
- * on-device falls back to Spanish dictionary / leaves text unchanged.
+ * Coverage honesty: local dictionary ES/EN/PT only. Product on-device path
+ * for Private chats is not claimed ready yet (see docs/HECHO.md).
  */
 
 import { applyGlossary, getGlossaryCache } from './glossaryCache';
 
 export type OnDeviceLang = 'es' | 'en' | 'pt';
 
-/** Languages with a real local dictionary today. */
+/** Languages with a real local dictionary today (not the product claim). */
 export const ON_DEVICE_LANGS: OnDeviceLang[] = ['es', 'en', 'pt'];
-
-/** UI may list these; on-device does not claim neural coverage. */
-export const ON_DEVICE_STRETCH_LANGS = ['qu', 'gn', 'quc'] as const;
 
 const PHRASES: Array<[string, Partial<Record<OnDeviceLang, string>>]> = [
   ['hola', { es: 'Hola', en: 'Hello', pt: 'Olá' }],

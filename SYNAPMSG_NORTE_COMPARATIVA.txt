@@ -186,10 +186,11 @@ No (no tiene traducción
 nativa)
 ★ Sí: escribes en tu idioma, receptor 
 recibe en el suyo
-★ 100+ idiomas (incluye quechua, 
-guaraní, maya k'iche')
-★ Sí (Whisper.cpp local, sin que el 
-mensaje salga del teléfono)
+★ 12 idiomas en la nube (español, inglés,
+portugués, francés, italiano, alemán, chino,
+japonés, coreano, árabe, ruso e hindi).
+No es traducción dentro del teléfono.
+Traducción en el teléfono: todavía no
 Detección automática de 
 idioma
 ★ Sí (jerga, nombres propios, 

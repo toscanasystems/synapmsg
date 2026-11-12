@@ -29,8 +29,7 @@ const router = Router();
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const SUPPORTED_LANGUAGES = new Set([
-  'es', 'en', 'pt', 'fr', 'it', 'de', 'zh', 'ja', 'ko', 'ru',
-  'nl', 'pl', 'tr', 'uk', 'sv', 'da', 'fi', 'el', 'cs', 'ro', 'id', 'bg', 'nb', 'hu',
+  'es', 'en', 'pt', 'fr', 'it', 'de', 'zh', 'ja', 'ko', 'ar', 'ru', 'hi',
 ]);
 
 interface RegisterBody {

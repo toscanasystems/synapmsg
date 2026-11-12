@@ -45,7 +45,8 @@ Never ship “security theater”: no plaintext key material in logs, no server-
 - Prefer recipient preferred language; show badge + tap-for-original.
 - Cloud path (DeepL) must respect freemium usage limits already in `apps/api/src/billing`.
 - On-device path must not upload ciphertext plaintext of E2E chats to translation cloud — if E2E+on-device, decrypt only on device.
-- Do not claim 100+ languages until engines actually cover them; keep LatAm minority languages as explicit stretch goals.
+- Cloud translation claim: exactly 12 languages (es, en, pt, fr, it, de, zh, ja, ko, ar, ru, hi).
+  That list is cloud (Nube) only — on-device Private translation is not ready. Never claim “100+” or “all languages”.
 
 ## Engineering conventions
 - TypeScript strict; match existing file style; minimal diffs; no drive-by refactors.

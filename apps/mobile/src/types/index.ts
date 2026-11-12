@@ -18,37 +18,22 @@ export interface LanguageOption {
 }
 
 /**
- * Dropdown options for the onboarding/settings screens.
- * LatAm first (incl. quechua / guaraní / k'iche'), then DeepL set.
+ * Cloud translation languages (chat Nube) — same 12 as product copy.
+ * On-device translation for Private chats is not ready yet.
  */
 export const LANGUAGES: LanguageOption[] = [
   { code: 'es', label: 'Español', flag: '🇲🇽' },
   { code: 'en', label: 'English', flag: '🇺🇸' },
   { code: 'pt', label: 'Português', flag: '🇧🇷' },
-  { code: 'qu', label: 'Quechua', flag: '🇵🇪' },
-  { code: 'gn', label: 'Guaraní', flag: '🇵🇾' },
-  { code: 'quc', label: "K'iche' (Maya)", flag: '🇬🇹' },
   { code: 'fr', label: 'Français', flag: '🇫🇷' },
   { code: 'it', label: 'Italiano', flag: '🇮🇹' },
   { code: 'de', label: 'Deutsch', flag: '🇩🇪' },
-  { code: 'nl', label: 'Nederlands', flag: '🇳🇱' },
-  { code: 'pl', label: 'Polski', flag: '🇵🇱' },
-  { code: 'tr', label: 'Türkçe', flag: '🇹🇷' },
-  { code: 'uk', label: 'Українська', flag: '🇺🇦' },
-  { code: 'ru', label: 'Русский', flag: '🇷🇺' },
   { code: 'zh', label: '中文', flag: '🇨🇳' },
   { code: 'ja', label: '日本語', flag: '🇯🇵' },
   { code: 'ko', label: '한국어', flag: '🇰🇷' },
-  { code: 'sv', label: 'Svenska', flag: '🇸🇪' },
-  { code: 'da', label: 'Dansk', flag: '🇩🇰' },
-  { code: 'fi', label: 'Suomi', flag: '🇫🇮' },
-  { code: 'el', label: 'Ελληνικά', flag: '🇬🇷' },
-  { code: 'cs', label: 'Čeština', flag: '🇨🇿' },
-  { code: 'ro', label: 'Română', flag: '🇷🇴' },
-  { code: 'id', label: 'Indonesia', flag: '🇮🇩' },
-  { code: 'bg', label: 'Български', flag: '🇧🇬' },
-  { code: 'nb', label: 'Norsk', flag: '🇳🇴' },
-  { code: 'hu', label: 'Magyar', flag: '🇭🇺' },
+  { code: 'ar', label: 'العربية', flag: '🇸🇦' },
+  { code: 'ru', label: 'Русский', flag: '🇷🇺' },
+  { code: 'hi', label: 'हिन्दी', flag: '🇮🇳' },
 ];
 
 /** Human-friendly lookup helper: "es" -> "Español". */

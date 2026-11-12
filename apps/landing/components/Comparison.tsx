@@ -19,9 +19,14 @@ const ROWS: Row[] = [
     Synap: "Todavía no",
   },
   {
+    feature: "Traducción en la nube (12 idiomas, chat Nube)",
+    Synap: true,
+  },
+  {
     feature: "Traducción en el teléfono (Privado)",
     Synap: "Todavía no",
   },
+
   {
     feature: "Wipe remoto + PIN de coacción cerrados con prueba",
     Synap: "Todavía no",

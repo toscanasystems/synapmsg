@@ -1,36 +1,35 @@
 import axios, { AxiosError } from 'axios';
 
 /**
- * DeepL + fallbacks (MyMemory) for LatAm languages DeepL no cubre.
+ * Cloud translation languages (chat Nube only).
+ * On-device MT for Private chats is not ready — do not claim it here.
  */
 
 const DEEPL_API_KEY: string = process.env.DEEPL_API_KEY || '';
 const DEEPL_API_URL: string =
   process.env.DEEPL_API_URL || 'https://api-free.deepl.com/v2/translate';
 
-/** Native DeepL targets. */
-export const DEEPL_LANGUAGES: readonly string[] = [
-  'ES', 'EN', 'PT', 'FR', 'IT', 'DE', 'ZH', 'JA', 'KO', 'RU',
-  'NL', 'PL', 'TR', 'UK', 'SV', 'DA', 'FI', 'EL', 'CS', 'RO', 'ID', 'BG', 'NB', 'HU',
+/**
+ * Product cloud list (12). Prefer this name in docs/copy.
+ * Same codes as APP_LANGUAGES (lowercase).
+ */
+export const SUPPORTED_LANGUAGES: readonly string[] = [
+  'es', 'en', 'pt', 'fr', 'it', 'de', 'zh', 'ja', 'ko', 'ar', 'ru', 'hi',
 ];
 
-/**
- * Synapmsg-supported codes (lowercase app codes).
- * qu / gn / quc → puente vía ES + MyMemory cuando exista.
- */
-export const APP_LANGUAGES: readonly string[] = [
-  'es', 'en', 'pt', 'fr', 'it', 'de', 'zh', 'ja', 'ko', 'ru',
-  'nl', 'pl', 'tr', 'uk', 'sv', 'da', 'fi', 'el', 'cs', 'ro', 'id', 'bg', 'nb', 'hu',
-  'qu', 'gn', 'quc',
+/** Native DeepL targets used when available; others may use fallback bridge. */
+export const DEEPL_LANGUAGES: readonly string[] = [
+  'ES', 'EN', 'PT', 'FR', 'IT', 'DE', 'ZH', 'JA', 'KO', 'RU', 'AR',
 ];
+
+/** @deprecated Prefer SUPPORTED_LANGUAGES — kept as alias for existing imports. */
+export const APP_LANGUAGES: readonly string[] = SUPPORTED_LANGUAGES;
 
 const DEEPL_SET = new Set(DEEPL_LANGUAGES);
 
-/** Map app/DeepL codes that need a bridge. */
+/** Map app codes that need a DeepL bridge (or fallback provider). */
 const BRIDGE_TO_DEEPL: Record<string, string> = {
-  QU: 'ES',
-  GN: 'ES',
-  QUC: 'ES',
+  HI: 'EN',
 };
 
 export function normalizeLanguageCode(lang: string): string {
