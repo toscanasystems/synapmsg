@@ -15,24 +15,43 @@ const ROWS: Row[] = [
     Synap: true,
   },
   {
-    feature: "Protocolo Signal completo",
-    Synap: "Todavía no",
+    feature: "Chats de 2 personas y grupos con la librería de Signal",
+    Synap: true,
+  },
+  {
+    feature: "Traducción en el teléfono (Privado), probado inglés a español",
+    Synap: true,
   },
   {
     feature: "Traducción en la nube (12 idiomas, chat Nube)",
     Synap: true,
   },
   {
-    feature: "Traducción en el teléfono (Privado)",
-    Synap: "Todavía no",
-  },
-
-  {
-    feature: "Wipe remoto + PIN de coacción cerrados con prueba",
-    Synap: "Todavía no",
+    feature: "Alta sin correo, número propio de 10 dígitos",
+    Synap: true,
   },
   {
-    feature: "FIDO2 / registro público de claves / post-cuántica cerrados",
+    feature: "PIN, PIN de coacción y borrado remoto, probado entre dos teléfonos",
+    Synap: true,
+  },
+  {
+    feature: "Llave física (FIDO2), registro de claves e inactividad",
+    Synap: true,
+  },
+  {
+    feature: "Claves guardadas en el almacén seguro del teléfono",
+    Synap: true,
+  },
+  {
+    feature: "Grupos, archivos sellados, autodestrucción, edición 48 h, encuestas, temas",
+    Synap: true,
+  },
+  {
+    feature: "Todavía no: llamadas de voz y video",
+    Synap: "Todavía no",
+  },
+  {
+    feature: "Todavía no: canales y archivos de más de 25 MB",
     Synap: "Todavía no",
   },
 ];
@@ -78,6 +97,10 @@ export function Comparison() {
             </tbody>
           </table>
         </div>
+
+        <p className="mt-6 text-sm text-gray-500">
+          Comparado con otras apps cuando cada fila esté probada en un teléfono.
+        </p>
       </div>
     </section>
   );

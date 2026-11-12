@@ -22,7 +22,7 @@ const faqs = [
   {
     q: "¿Cuánto cuesta Premium?",
     a: "Premium es $4.99 USD / mes (más media). Se activa desde Ajustes en la app cuando el cobro esté configurado.",
-  }
+  },
   {
     q: "¿Cómo elimino mi cuenta?",
     a: "Escríbenos a soporte@synapmsg.ai desde el email de tu cuenta y procesaremos la eliminación.",
