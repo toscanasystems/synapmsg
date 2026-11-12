@@ -218,9 +218,10 @@ export function ChatListScreen(): JSX.Element {
         accessibilityRole="button"
         accessibilityLabel="Abrir seguridad en Ajustes"
       >
-        <Text style={styles.demoBannerTitle}>Seguridad absoluta activa</Text>
+        <Text style={styles.demoBannerTitle}>Modo Privado por defecto</Text>
         <Text style={styles.demoBannerSub}>
-          E2E · Private Number · wipe · PIN de coacción — tocá para Ajustes
+          En Privado el servidor no guarda texto legible. Nube = el servidor puede
+          leer — tocá Ajustes / privacidad del chat.
         </Text>
       </Pressable>
 

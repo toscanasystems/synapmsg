@@ -102,7 +102,7 @@ export function ToolsScreen(): JSX.Element {
     try {
       await Share.share({
         message:
-          'Únete a Synap — mensajería con seguridad absoluta.\n' +
+          'Únete a Synap — chat Privado sin texto legible en el servidor.\n' +
           'https://synapmsg.ai\n' +
           'Android: https://media.synapmsg.ai/downloads/synap-android.apk\n\n' +
           (user ? `Búscame como @${user.username}` : ''),

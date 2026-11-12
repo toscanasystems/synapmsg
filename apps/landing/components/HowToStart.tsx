@@ -2,22 +2,17 @@
   {
     n: "01",
     title: "Descargá Synap para Android",
-    body: "APK lista hoy. Instalá, abrí la app y creá tu cuenta con email o Private Number. Sin SIM.",
+    body: "Instalá la APK y creá tu cuenta con correo. Sin SIM obligatoria.",
   },
   {
     n: "02",
-    title: "Recibí tu Private Number",
-    body: "Un número virtual de 10 dígitos (XX-XXXX-XXXX). No es celular: solo te encuentran si lo compartís.",
+    title: "Empezá en modo Privado",
+    body: "El servidor no guarda el mensaje en claro: guarda un paquete que no puede leer.",
   },
   {
     n: "03",
-    title: "Activá el paquete de seguridad",
-    body: "E2E privado por defecto, bloqueo de app, wipe remoto y PIN de coacción cuando lo necesites.",
-  },
-  {
-    n: "04",
-    title: "Invitá y chateá",
-    body: "Pedile a tu contacto su Private Number o email. Empezá un chat en modo Privado E2E.",
+    title: "Si elegís Nube, leé el aviso",
+    body: "En Nube el servidor sí puede leer ese chat. La app te lo dice antes de crearlo.",
   },
 ];
 
@@ -30,15 +25,14 @@ export function HowToStart() {
             Cómo empezar
           </p>
           <h2 className="font-serif text-4xl md:text-5xl font-bold text-white mb-4">
-            Android GA listo · iOS pendiente
+            Android disponible
           </h2>
           <p className="text-lg text-gray-300 leading-relaxed">
-            Descargá la APK, creá tu cuenta y entrá con seguridad absoluta desde
-            el primer mensaje. iOS llega en TestFlight / App Store a continuación.
+            iOS todavía no. Lo demás del roadmap espera su prueba.
           </p>
         </div>
 
-        <ol className="grid gap-8 md:grid-cols-2">
+        <ol className="grid gap-8 md:grid-cols-3">
           {STEPS.map((s) => (
             <li key={s.n} className="flex gap-5">
               <span className="font-mono text-accent text-sm pt-1">{s.n}</span>
@@ -56,12 +50,6 @@ export function HowToStart() {
             className="rounded-xl bg-accent px-6 py-3.5 font-semibold text-black hover:bg-accent/90 transition-colors"
           >
             Descargar APK Android
-          </a>
-          <a
-            href="#planes"
-            className="rounded-xl border border-white/20 px-6 py-3.5 font-semibold text-white hover:border-accent/50 transition-colors"
-          >
-            Ver planes
           </a>
         </div>
       </div>

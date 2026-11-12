@@ -374,7 +374,7 @@ export function SettingsScreen(): JSX.Element {
         Alert.alert(
           'Synap Premium',
           payEnabled
-            ? 'Misma seguridad absoluta + 100 GB de media, archivos grandes y sin anuncios. $4.99/mes vía Recurrente.'
+            ? 'Más cuota de media (objetivo 100 GB), archivos grandes y sin anuncios. $4.99/mes vía Recurrente.'
             : 'Pagos Recurrente aún sin keys en el servidor. Puedes probar 30 días.',
           buttons,
         );
@@ -534,7 +534,7 @@ export function SettingsScreen(): JSX.Element {
     try {
       await Share.share({
         message:
-          'Únete a Synap — mensajería con seguridad absoluta.\n' +
+          'Únete a Synap — chat Privado sin texto legible en el servidor.\n' +
           'https://synapmsg.ai\n' +
           'Android: https://media.synapmsg.ai/downloads/synap-android.apk\n\n' +
           (user ? `Búscame como @${user.username}` : ''),

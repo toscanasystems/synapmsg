@@ -25,11 +25,10 @@ export function Hero() {
         </h1>
 
         <p className="mt-6 max-w-2xl text-xl md:text-2xl text-gray-200 leading-relaxed animate-slide-up">
-          Mensajería con seguridad absoluta.
-          <span className="block mt-2 text-lg text-gray-400">
-            Cifrado extremo a extremo, Private Number sin SIM, wipe remoto,
-            PIN de coacción y defensa post-cuántica. Para el mundo entero.
-          </span>
+          En un chat Privado, el servidor no guarda el mensaje en claro. Guarda un
+          paquete que no puede leer. En un chat Nube, el servidor sí puede
+          leerlo, y la app te lo avisa antes de crearlo. Lo demás todavía no
+          está listo.
         </p>
 
         <div className="mt-10 flex flex-wrap gap-3 animate-slide-up">
@@ -37,25 +36,15 @@ export function Hero() {
             href="https://media.synapmsg.ai/downloads/synap-android.apk"
             className="rounded-xl bg-accent px-7 py-3.5 font-semibold text-black hover:bg-accent/90 transition-colors"
           >
-            Descargar Android · GA 1.1
+            Descargar Android
           </a>
-          <span className="rounded-xl border border-white/15 bg-white/5 px-7 py-3.5 font-semibold text-gray-400">
-            iOS · próximamente
-          </span>
           <a
-            href="#seguridad"
+            href="#demostrado"
             className="rounded-xl border border-white/20 bg-white/5 px-7 py-3.5 font-semibold text-white hover:border-accent/50 transition-colors"
           >
-            Ver seguridad
+            Qué está demostrado
           </a>
         </div>
-
-        <ul className="mt-14 flex flex-wrap gap-x-8 gap-y-3 text-sm text-gray-300 animate-fade-in">
-          <li>E2E + post-cuántica (ML-KEM)</li>
-          <li>Sin número de celular</li>
-          <li>Wipe remoto · PIN de coacción</li>
-          <li>AGPL · auditable</li>
-        </ul>
       </div>
     </section>
   );

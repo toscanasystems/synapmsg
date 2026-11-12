@@ -1,42 +1,23 @@
 ﻿const FEATURES = [
   {
-    icon: "🛡️",
-    title: "Seguridad absoluta",
+    title: "Modo Privado",
     description:
-      "E2E por defecto, wipe remoto firmado, PIN de coacción con cuenta señuelo, KTL, Dead Man's Switch, FLAG_SECURE y FIDO2. Lo que WhatsApp y Telegram no empaquetan juntos.",
-    highlight: "Paquete ★",
+      "El servidor guarda un paquete cifrado. No puede leer el mensaje.",
   },
   {
-    icon: "🔐",
-    title: "Post-cuántica híbrida",
+    title: "Modo Nube (opcional)",
     description:
-      "Handshake X3DH + Double Ratchet + ML-KEM768. Defensa real contra harvest-now-decrypt-later, no theater.",
-    highlight: "ML-KEM",
+      "Si lo elegís, el servidor puede leer y traducir el chat. Te avisamos antes.",
   },
   {
-    icon: "📵",
-    title: "Private Number · sin SIM",
+    title: "Cuenta sin SIM",
     description:
-      "Al crear la cuenta te damos un Private Number único (XX-XXXX-XXXX). No es un celular: solo te encuentran si lo compartís.",
-    highlight: "Sin SIM",
+      "Registro con correo. Private Number virtual para que te encuentren solo si lo compartís.",
   },
   {
-    icon: "🧨",
-    title: "Wipe remoto + coacción",
+    title: "Código abierto",
     description:
-      "Vacía el dispositivo a distancia. El PIN de coacción abre un señuelo — no tu vault real.",
-  },
-  {
-    icon: "⚖️",
-    title: "Híbrido por chat",
-    description:
-      "Privado E2E o nube sincronizada — lo elegís por conversación. Servidor sin plaintext cuando el chat es E2E.",
-  },
-  {
-    icon: "📜",
-    title: "AGPL · auditable",
-    description:
-      "Código abierto y bug bounty. Seguridad verificable, no marketing opaco.",
+      "Repositorio público. Lo que aún no está listo, lo decimos.",
   },
 ];
 
@@ -46,39 +27,24 @@ export function Features() {
       <div className="mx-auto max-w-6xl px-6">
         <div className="mx-auto max-w-3xl text-center mb-16">
           <span className="inline-block rounded-full bg-accent/20 px-4 py-1.5 text-sm font-medium text-accent-light mb-4">
-            Lo mejor de Synap
+            Producto
           </span>
           <h2 className="font-serif text-4xl md:text-5xl font-bold text-white mb-4">
-            Seguridad absoluta. Sin teatro.
+            Lo que podemos afirmar hoy
           </h2>
           <p className="text-lg text-gray-300 leading-relaxed">
-            Paquete de seguridad absoluta para el mundo entero — E2E, wipe,
-            coacción, post-cuántica y Private Number sin SIM.
+            Sin promesas vacías. Sin “seguridad absoluta”.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {FEATURES.map((feature) => (
             <div
               key={feature.title}
-              className="group relative rounded-2xl bg-surface p-8 border border-white/10 hover:border-accent/40 hover:shadow-[0_0_30px_rgba(48,176,176,0.15)] transition-all duration-300"
+              className="rounded-2xl bg-surface p-8 border border-white/10"
             >
-              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-xl bg-accent/15 text-3xl group-hover:scale-110 transition-transform duration-300">
-                {feature.icon}
-              </div>
-
-              <h3 className="text-xl font-bold text-white mb-3 flex flex-wrap items-center gap-2">
-                {feature.title}
-                {feature.highlight ? (
-                  <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-black">
-                    {feature.highlight}
-                  </span>
-                ) : null}
-              </h3>
-
-              <p className="text-gray-300 leading-relaxed">
-                {feature.description}
-              </p>
+              <h3 className="text-xl font-bold text-white mb-3">{feature.title}</h3>
+              <p className="text-gray-300 leading-relaxed">{feature.description}</p>
             </div>
           ))}
         </div>

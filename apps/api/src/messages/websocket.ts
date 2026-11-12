@@ -14,6 +14,11 @@ function toAppLang(code: string): string {
   return toAppLanguageCode(code);
 }
 import { pushToUserTokens } from '../lib/push';
+import {
+  PRIVATE_PLAINTEXT_FORBIDDEN,
+  assertPrivateRowOpaque,
+  buildPrivateMessageDbFields,
+} from './privateEnvelope';
 
 // ───────────────────────────────────────────────────────────
 // Connection registry: userId -> set of open sockets
@@ -375,9 +380,13 @@ export async function createAndBroadcastMessage(
   const e2eMode = chat.encryptionMode === 'e2e';
 
   if (e2eMode && !hasCipher) {
+    throw new HttpError(400, PRIVATE_PLAINTEXT_FORBIDDEN);
+  }
+  // Private chats must not put readable body on the wire either.
+  if (e2eMode && typeof text === 'string' && text.trim().length > 0) {
     throw new HttpError(
       400,
-      'Este chat está en modo E2E: se requiere ciphertext (el servidor no acepta plaintext)',
+      'Chat Privado: no envíes texto en claro. Solo ciphertext.',
     );
   }
 
@@ -409,28 +418,39 @@ export async function createAndBroadcastMessage(
   const viewOnce = Boolean(media?.viewOnce) &&
     (media?.mediaType === 'image' || media?.mediaType === 'audio');
 
-  // E2E path: store ciphertext only — never translate / never keep plaintext.
+  // Private path: opaque envelope only — never translate / never keep plaintext.
   if (e2eMode && hasCipher) {
+    let envelope;
+    try {
+      envelope = buildPrivateMessageDbFields(
+        {
+          ciphertext: media!.ciphertext!.trim(),
+          ciphertextType:
+            typeof media?.ciphertextType === 'number' ? media.ciphertextType : 1,
+          mediaUrl: media?.mediaUrl || null,
+          mediaType: media?.mediaType || null,
+          replyToId,
+          expiresAt,
+          viewOnce,
+          originalLanguage: toAppLang(languageHint),
+        },
+        text, // ignored — must never land in originalText
+      );
+    } catch (e) {
+      throw new HttpError(
+        400,
+        e instanceof Error ? e.message : 'Sobre privado inválido',
+      );
+    }
+
     const message: DbMessage = await prisma.message.create({
       data: {
         chatId,
         senderId,
-        originalText: '',
-        originalLanguage: toAppLang(languageHint),
-        translatedText: null,
-        translatedLanguage: null,
-        isTranslated: false,
-        mediaUrl: media?.mediaUrl || null,
-        mediaType: media?.mediaType || null,
-        ciphertext: media!.ciphertext!.trim(),
-        ciphertextType:
-          typeof media?.ciphertextType === 'number' ? media.ciphertextType : 1,
-        isE2e: true,
-        replyToId,
-        expiresAt,
-        viewOnce,
+        ...envelope,
       },
     });
+    assertPrivateRowOpaque(message, typeof text === 'string' ? text : undefined);
 
     await prisma.chat
       .update({ where: { id: chatId }, data: { updatedAt: new Date() } })

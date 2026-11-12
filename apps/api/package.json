@@ -12,7 +12,10 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:push": "prisma db push --skip-generate",
     "prisma:studio": "prisma studio",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test dist/messages/privateEnvelope.test.js dist/lib/jwtSecret.test.js",
+    "test:private-db": "npm run build && node scripts/test-private-db.js",
+    "prove:private": "npm run build && node scripts/prove-private-no-plaintext.js"
   },
   "keywords": [
     "synapmsg",

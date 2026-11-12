@@ -210,7 +210,7 @@ router.post('/:chatId/messages', async (req: Request, res: Response, next: NextF
       if (chatMode?.encryptionMode === 'e2e') {
         res.status(400).json({
           error:
-            'Scheduled messages are not available in Private E2E chats (would store plaintext on server)',
+            'En chats Privado no se pueden programar mensajes (el servidor no guarda texto legible).',
         });
         return;
       }
@@ -313,7 +313,7 @@ router.patch(
       if (msg.isE2e || msg.chat.encryptionMode === 'e2e') {
         res.status(400).json({
           error:
-            'E2E messages cannot be edited via plaintext API (would expose content on server)',
+            'Los mensajes Privados no se editan por API de texto plano (el servidor no guarda el cuerpo legible).',
         });
         return;
       }

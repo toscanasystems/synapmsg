@@ -9,20 +9,20 @@ export const metadata: Metadata = {
 const faqs = [
   {
     q: "¿Qué es Synap?",
-    a: "Una app de mensajería con seguridad absoluta: cifrado extremo a extremo, Private Number sin SIM, wipe remoto, PIN de coacción y defensa post-cuántica.",
+    a: "Una app de mensajería de Toscana Systems. En Privado el servidor no lee el mensaje; en Nube sí puede, con aviso. Lo demás todavía no está listo.",
   },
   {
     q: "¿Mis chats son privados?",
-    a: "Sí. En modo Privado el contenido usa E2E: el servidor solo ve ciphertext. No leemos tus conversaciones ni las usamos para anuncios.",
+    a: "En modo Privado el servidor guarda un paquete cifrado que no puede leer. Si activás Nube, el servidor puede leer y traducir ese chat — la app te avisa antes.",
   },
   {
     q: "¿Dónde descargo Android?",
-    a: "En synapmsg.ai — botón Descargar Android (APK). Instalá y creá tu cuenta con email o Private Number.",
+    a: "En synapmsg.ai — botón Descargar Android (APK). Instalá y creá tu cuenta con email.",
   },
   {
     q: "¿Cuánto cuesta Premium?",
-    a: "Gratis incluye el paquete de seguridad. Premium es $4.99 USD / mes (más media y soporte). Se activa desde Ajustes en la app.",
-  },
+    a: "Premium es $4.99 USD / mes (más media). Se activa desde Ajustes en la app cuando el cobro esté configurado.",
+  }
   {
     q: "¿Cómo elimino mi cuenta?",
     a: "Escríbenos a soporte@synapmsg.ai desde el email de tu cuenta y procesaremos la eliminación.",

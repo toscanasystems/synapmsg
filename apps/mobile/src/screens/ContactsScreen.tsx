@@ -219,7 +219,7 @@ export function ContactsScreen(): JSX.Element {
     const phone = c.phones[0];
     const msg =
       `Hola${c.name ? ` ${c.name.split(' ')[0]}` : ''}, únete a Synap ` +
-      `(mensajería con seguridad absoluta).\nhttps://synapmsg.ai` +
+      `(chat Privado: el servidor no lee el mensaje).\nhttps://synapmsg.ai` +
       (me ? `\nBúscame como @${me.username}` : '');
     try {
       if (phone && Platform.OS === 'android') {

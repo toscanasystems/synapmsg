@@ -2,23 +2,22 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Synap — Mensajería con seguridad absoluta",
+  title: "Synap — mensajería Privado / Nube",
   description:
-    "La mensajería más segura: cifrado extremo a extremo, Private Number sin SIM, wipe remoto, PIN de coacción y defensa post-cuántica. Disponible en todo el mundo.",
+    "En un chat Privado el servidor no guarda el mensaje en claro. En Nube sí puede leerlo, y la app avisa antes. Lo demás todavía no está listo.",
   keywords: [
     "mensajería",
     "chat",
     "cifrado",
-    "seguridad",
     "privacidad",
-    "E2E",
     "Synap",
+    "Toscana Systems",
   ],
   authors: [{ name: "Toscana Systems, S.A." }],
   openGraph: {
-    title: "Synap — Mensajería con seguridad absoluta",
+    title: "Synap",
     description:
-      "E2E, Private Number sin SIM, wipe remoto y post-cuántica. Para el mundo entero.",
+      "Privado: el servidor no lee el mensaje. Nube: sí puede, con aviso. Lo demás todavía no.",
     type: "website",
     url: "https://synapmsg.ai",
     siteName: "Synap",
@@ -27,7 +26,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Synap",
     description:
-      "Mensajería con seguridad absoluta. Cifrado E2E, sin SIM, wipe remoto.",
+      "Privado sin mensaje en claro en el servidor. Nube con aviso. Lo demás todavía no.",
   },
   robots: { index: true, follow: true },
   viewport: "width=device-width, initial-scale=1, maximum-scale=5",

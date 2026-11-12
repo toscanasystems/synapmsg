@@ -1,38 +1,32 @@
-# Synap — Norte (Android GA 1.1.0)
+# Synap — Norte (roadmap)
 
-Marca: **Synap**. Dominio / API: **synapmsg.ai** (`api.synapmsg.ai`, `media.synapmsg.ai`).  
-Android APK (GA): https://media.synapmsg.ai/downloads/synap-android.apk  
-Landing: https://synapmsg.ai
+Marca: **Synap**. Dominio / API: **synapmsg.ai**.  
+Landing: https://synapmsg.ai  
+**Afirmaciones demostradas:** solo [`docs/HECHO.md`](./docs/HECHO.md).
 
-## Estado de producto
+## Estado
 
 | Plataforma | Estado |
 |---|---|
-| **Android (APK)** | **GA / completo** para el norte de mensajería + seguridad absoluta |
-| **iOS** | **Único pendiente** (TestFlight / App Store) |
-| Desktop Tauri / Wallet custody | Fuera de 1.1 — ecosistema post-GA |
-| Play Store listing | Opcional (canal principal = APK directa) |
+| Android (APK) | Disponible; capacidades = HECHO.md |
+| iOS | Pendiente |
+| Desktop / wallet custody | Roadmap |
 
-## Shipped (Android GA)
+## Demostrado
 
-- E2E por defecto + PQ ML-KEM768 + Double Ratchet (`synapmsg-pq-v1`)
-- Enclave nativo `synap-enclave` (root / Frida / emulator / StrongBox)
-- Almacén local cifrado (SQLCipher-class file-DB + Keystore)
-- Whisper on-device path + MT on-device ES/EN/PT (E2E sin DeepL)
-- Túnel anti-censura embebido (`media.synapmsg.ai/tunnel`) + perfiles WG/Outline
-- Autodestrucción bilateral 1/6/12/24h (texto/foto/audio)
-- Foto/audio ver·escuchar una vez
-- Wipe Ed25519 · duress · señuelo · DMS · KTL · FIDO2 · FLAG_SECURE · chats ocultos
-- Freemium · Recurrente **$4.99** · Bot API v1 · landing seguridad-first
-- UI: Ajustes (arriba) · Herramientas (abajo)
+Ver `docs/HECHO.md` (Fase 1: Privado sin plaintext en DB; JWT_SECRET obligatorio; copy sin “seguridad absoluta”).
 
-## Native binds (Android)
+## Todavía no (no afirmar)
 
-- **libsignal JNI** — `org.signal:libsignal-client:0.76.1` vía módulo `synap-libsignal` (Curve/HKDF/AES-GCM + status)
-- **SQLCipher NDK** — `net.zetetic:sqlcipher-android:4.9.0` vía módulo `synap-sqlcipher` (store cifrado real; fallback file-DB)
-- Wire E2E sigue `synapmsg-pq-v1` (DR+PQ) para compatibilidad de sesiones
-- whisper.cpp binder nativo — path + modelo lazy (siguiente)
+- Signal / libsignal demostrado (Fase 2)
+- Traducción on-device en Privado con prueba (Fase 3)
+- Cuenta multi-dispositivo / wipe / coacción con prueba de punta a punta (Fase 4)
+- PQ + KTL + FIDO2 + DMS + StrongBox como paquete cerrado (Fase 5)
+- Grupos, canales, archivos grandes, llamadas cerradas (Fase 6)
+- PDF comparativo regenerado sin filas no probadas
 
-## Pendiente explícito
+## Decisiones de producto (ya tomadas)
 
-1. **iOS** — Expo/RN → TestFlight → App Store  
+- **Privado:** E2E; servidor solo ilegible; traducción (cuando exista) en el teléfono, nunca DeepL.
+- **Nube:** elección explícita; servidor puede leer; aviso antes de activar.
+- Nunca llamar al producto “seguridad absoluta”.

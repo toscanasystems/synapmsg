@@ -1,17 +1,12 @@
 import jwt, { SignOptions, JwtPayload } from 'jsonwebtoken';
 import crypto from 'crypto';
+import { requireJwtSecretFromEnv } from './jwtSecretPolicy';
 
-const NODE_ENV = process.env.NODE_ENV || 'development';
-const rawJwt = (process.env.JWT_SECRET || '').trim();
-if (
-  NODE_ENV === 'production' &&
-  (!rawJwt || rawJwt.length < 32 || rawJwt === 'dev-insecure-secret-change-me')
-) {
-  throw new Error(
-    '[fatal] JWT_SECRET missing/weak in production (min 32 chars, no default)',
-  );
-}
-const JWT_SECRET: string = rawJwt || 'dev-insecure-secret-change-me';
+/**
+ * JWT_SECRET is mandatory in every environment.
+ * No hardcoded fallback — missing/weak secret → process must not start.
+ */
+const JWT_SECRET: string = requireJwtSecretFromEnv();
 const JWT_EXPIRES_IN: string = process.env.JWT_EXPIRES_IN || '7d';
 
 export interface AuthTokenPayload extends JwtPayload {
@@ -28,7 +23,6 @@ export function signToken(user: { id: string; email: string; username: string })
     sub: user.id,
     email: user.email,
     username: user.username,
-    // explicit iat so tests are deterministic
     iat: Math.floor(Date.now() / 1000),
   };
 
@@ -80,3 +74,5 @@ export function verifyToken(token: string): AuthTokenPayload {
 export function generateOpaqueToken(byteLength = 32): string {
   return crypto.randomBytes(byteLength).toString('hex');
 }
+
+export { jwtSecretIsAcceptable } from './jwtSecretPolicy';

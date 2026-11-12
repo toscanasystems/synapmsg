@@ -1,39 +1,29 @@
-# Synap — Security (Android GA)
+# Synap — Security
 
-Producto: **Synap** · dominio `synapmsg.ai` · APK Android GA: `media.synapmsg.ai/downloads/synap-android.apk`.  
-**iOS:** pendiente.
+**Fuente de afirmaciones demostradas:** [`docs/HECHO.md`](./docs/HECHO.md).  
+Este archivo no duplica marketing. Si no está en `HECHO.md`, no está demostrado.
 
-## Controles activos (API + APK Android)
+## Demostrado (ver HECHO.md)
 
 | Control | Estado |
 |---|---|
-| TLS prod | Sí |
-| JWT + bcrypt/argon2 | Sí |
-| E2E `synapmsg-pq-v1` (X3DH + Double Ratchet) | Sí |
-| ML-KEM768 hybrid | Sí |
-| Híbrido cloud / e2e por chat | Sí |
-| Servidor sin plaintext en E2E | Sí |
-| Remote wipe Ed25519 verificado en cliente | Sí |
-| Duress PIN + señuelo | Sí |
-| Dead Man's Switch | Sí |
-| Key Transparency Log | Sí |
-| FIDO2 / WebAuthn + recovery | Sí |
-| FLAG_SECURE + enclave gate | Sí |
-| Native root/Frida/emulator/StrongBox | Sí |
-| SQLCipher NDK (`sqlcipher-android` 4.9.0) | Sí (fallback file-DB) |
-| libsignal JNI (`libsignal-client` 0.76.1) | Sí |
-| Whisper on-device path | Sí |
-| Túnel anti-censura (CF Worker) | Sí |
-| Autodestrucción bilateral + view-once | Sí |
-| Llamadas: signaling Synap WS; media Jitsi SFU (default) o WebRTC P2P | Sí (media ≠ E2E chat) |
-| Auto-login | Off en GA |
+| Chat Privado: servidor sin texto legible (`originalText` vacío + ciphertext) | Demostrado (Fase 1) |
+| Rechazo de plaintext-only en chats `encryptionMode=e2e` | Demostrado (Fase 1) |
+| `JWT_SECRET` obligatorio (≥32, sin fallback en código) | Demostrado (Fase 1) |
+| TLS en producción (`api.synapmsg.ai`) | Operativo (infra) |
 
-## Fase 5
-- Bot API v1 live (cloud only; nunca plaintext E2E a bots)
-- Wallet: stub de diseño (`GET /wallet/status`) — sin custody en GA
+## Todavía no (código puede existir; falta prueba en HECHO.md)
+
+- Signal / libsignal como protocolo de producción demostrado
+- Traducción on-device en Privado (sin DeepL) con prueba
+- Wipe remoto, PIN de coacción, FIDO2, KTL, DMS, StrongBox como paquete cerrado
+- Llamadas E2E de media
+- “100+ idiomas”
 
 ## Autoridades
-`docs/JUDICIAL_RUNBOOK.md` — orden judicial estricta; E2E = ciphertext.
+
+`docs/JUDICIAL_RUNBOOK.md` — en chats Privados el servidor solo tiene ciphertext.
 
 ## Bug bounty
+
 `docs/BUG_BOUNTY.md` · `support@synapmsg.ai` asunto `[SECURITY]`

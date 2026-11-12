@@ -4,10 +4,11 @@
       <div className="border-b border-white/10">
         <div className="mx-auto max-w-4xl px-6 py-20 text-center">
           <h2 className="font-serif text-3xl md:text-4xl font-bold mb-4">
-            Listo para mensajería con seguridad absoluta
+            Synap para Android
           </h2>
           <p className="text-gray-300 mb-8 max-w-xl mx-auto">
-            Descargá Synap para Android hoy. Disponible en todo el mundo.
+            En Privado el servidor no lee tu mensaje. En Nube sí puede, y te
+            avisamos. Lo demás todavía no está listo.
           </p>
           <a
             href="https://media.synapmsg.ai/downloads/synap-android.apk"
@@ -30,9 +31,7 @@
               <span className="text-xl font-bold">Synap</span>
             </div>
             <p className="text-gray-400 text-sm max-w-sm leading-relaxed">
-              Mensajería con seguridad absoluta: E2E, Private Number sin SIM,
-              wipe remoto y defensa post-cuántica. Un producto mundial de
-              Toscana Systems.
+              Un producto de Toscana Systems.
             </p>
             <a
               href="https://toscanasystems.com"
@@ -48,53 +47,50 @@
               />
             </a>
           </div>
-
           <div>
-            <h4 className="font-semibold text-sm mb-4 text-accent">Producto</h4>
+            <h4 className="font-semibold mb-3">Producto</h4>
             <ul className="space-y-2 text-sm text-gray-400">
-              <li><a href="/#seguridad" className="hover:text-white transition-colors">Seguridad</a></li>
-              <li><a href="/#empezar" className="hover:text-white transition-colors">Cómo empezar</a></li>
-              <li><a href="/#planes" className="hover:text-white transition-colors">Planes</a></li>
-              <li><a href="/#comparativa" className="hover:text-white transition-colors">Comparativa</a></li>
-              <li><a href="https://media.synapmsg.ai/downloads/synap-android.apk" className="hover:text-white transition-colors">Descargar Android</a></li>
-              <li><a href="/privacy" className="hover:text-white transition-colors">Privacidad</a></li>
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="font-semibold text-sm mb-4 text-accent">Empresa</h4>
-            <ul className="space-y-2 text-sm text-gray-400">
-              <li><a href="/support" className="hover:text-white transition-colors">Soporte</a></li>
-              <li><a href="/privacy" className="hover:text-white transition-colors">Privacidad</a></li>
               <li>
-                <a
-                  href="https://github.com/toscanasystems/synapmsg/blob/main/docs/BUG_BOUNTY.md"
-                  className="hover:text-white transition-colors"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Bug bounty
+                <a href="#demostrado" className="hover:text-accent-light">
+                  Demostrado
                 </a>
               </li>
-              <li><a href="mailto:soporte@synapmsg.ai" className="hover:text-white transition-colors">Contacto</a></li>
+              <li>
+                <a href="#planes" className="hover:text-accent-light">
+                  Planes
+                </a>
+              </li>
+              <li>
+                <a href="/support/" className="hover:text-accent-light">
+                  Soporte
+                </a>
+              </li>
+              <li>
+                <a href="/privacy/" className="hover:text-accent-light">
+                  Privacidad
+                </a>
+              </li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-semibold mb-3">Código</h4>
+            <ul className="space-y-2 text-sm text-gray-400">
+              <li>
+                <a
+                  href="https://github.com/toscanasystems/synapmsg"
+                  className="hover:text-accent-light"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  GitHub
+                </a>
+              </li>
             </ul>
           </div>
         </div>
-
-        <div className="mt-12 pt-8 border-t border-white/10 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex flex-col sm:flex-row items-center gap-3 text-sm text-gray-400">
-            <img
-              src="/toscana-logo.png"
-              alt="Toscana Systems"
-              className="h-6 w-auto max-w-[120px] object-contain opacity-90"
-            />
-            <p>© 2026 Toscana Systems, S.A. Todos los derechos reservados.</p>
-          </div>
-          <div className="flex items-center gap-6 text-sm text-gray-500">
-            <span>synapmsg.ai</span>
-            <span className="font-mono text-xs">Android 1.0.51</span>
-          </div>
-        </div>
+        <p className="mt-10 text-xs text-gray-500">
+          © {new Date().getFullYear()} Toscana Systems, S.A.
+        </p>
       </div>
     </footer>
   );

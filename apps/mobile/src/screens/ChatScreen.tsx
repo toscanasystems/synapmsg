@@ -552,12 +552,27 @@ export function ChatScreen(): JSX.Element {
               {
                 text: 'Nube sincronizada',
                 onPress: () => {
-                  void setEncryptionMode(chatId, 'cloud').catch((err) => {
-                    Alert.alert(
-                      'Privacidad',
-                      err instanceof ApiError ? err.message : 'No se pudo cambiar.',
-                    );
-                  });
+                  Alert.alert(
+                    'Avisо — modo Nube',
+                    'En Nube el servidor puede leer y traducir este chat (p. ej. DeepL) y sincronizar el historial. No es Privado. ¿Continuar?',
+                    [
+                      { text: 'Cancelar', style: 'cancel' },
+                      {
+                        text: 'Activar Nube',
+                        style: 'destructive',
+                        onPress: () => {
+                          void setEncryptionMode(chatId, 'cloud').catch((err) => {
+                            Alert.alert(
+                              'Privacidad',
+                              err instanceof ApiError
+                                ? err.message
+                                : 'No se pudo cambiar.',
+                            );
+                          });
+                        },
+                      },
+                    ],
+                  );
                 },
               },
               {
