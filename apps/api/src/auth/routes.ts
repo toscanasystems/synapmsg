@@ -17,12 +17,21 @@ import {
   formatPrivateNumber,
   looksLikePrivateNumber,
 } from '../lib/privateNumber';
+import { ipRateLimit } from '../middleware/ipRateLimit';
 
 const FIDO2_RP_ID = process.env.FIDO2_RP_ID || 'synapmsg.ai';
 const FIDO2_ORIGIN = process.env.FIDO2_ORIGIN || 'https://api.synapmsg.ai';
 const loginChallenges = new Map<string, string>();
 
 const router = Router();
+
+/** 5 attempts / minute / IP — window rolls forward (not a permanent ban). */
+const loginIpLimit = ipRateLimit({ name: 'auth-login', max: 5, windowMs: 60_000 });
+const registerIpLimit = ipRateLimit({
+  name: 'auth-register',
+  max: 5,
+  windowMs: 60_000,
+});
 
 // ───────────────────────────────────────────────────────────
 // Validation helpers
@@ -116,7 +125,7 @@ function serializeUser(user: {
 // ───────────────────────────────────────────────────────────
 // POST /auth/register
 // ───────────────────────────────────────────────────────────
-router.post('/register', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/register', registerIpLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const {
       email,
@@ -234,7 +243,7 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
  * First-open anonymous account: server allocates a unique 10-digit number.
  * No email/phone required. Existing email accounts are untouched.
  */
-router.post('/bootstrap', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/bootstrap', registerIpLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const preferredLanguage =
       typeof (req.body ?? {}).preferredLanguage === 'string' &&
@@ -306,7 +315,7 @@ router.post('/bootstrap', async (req: Request, res: Response, next: NextFunction
 // ───────────────────────────────────────────────────────────
 // POST /auth/login
 // ───────────────────────────────────────────────────────────
-router.post('/login', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/login', loginIpLimit, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email, password, deviceInstallId: rawDevice } =
       (req.body ?? {}) as LoginBody;

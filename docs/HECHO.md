@@ -3,6 +3,21 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-12 — Fase 7.2 Límite de intentos (login / registro)
+
+### Demostrado
+
+API `api.synapmsg.ai` + prueba local `127.0.0.1:3099` (Railway no respeta `X-Forwarded-For` del cliente).
+
+1. Login: 5 fallos → 401; el 6.º → **429** (`code: rate_limited`). Scripts `proof-rate-limit-login.js`.
+2. Registro/bootstrap: 5 altas → 201; el 6.º → **429**. Script `proof-rate-limit-register.js` en producción.
+3. Otra IP (local, cabecera `X-Forwarded-For` distinta): no hereda el límite; login correcto con `Fido2Prove_26` obtiene token.
+4. El límite es ventana de 1 minuto por IP (no ban permanente). Log: `[rate-limit] ip=… path=… name=auth-login|auth-register`.
+
+### Todavía no
+
+- Rate limit distribuido entre varias réplicas Railway (hoy es memoria del proceso).
+
 ## 2026-11-12 — Fase 7.1 Copia de seguridad Neon (restaurable)
 
 ### Demostrado
