@@ -201,8 +201,26 @@ export function ChatScreen(): JSX.Element {
   }, [chatId, me]);
 
   useEffect(() => {
+    useChatsStore.getState().setActiveChatId(chatId);
+    return () => {
+      const cur = useChatsStore.getState().activeChatId;
+      if (cur === chatId) useChatsStore.getState().setActiveChatId(null);
+    };
+  }, [chatId]);
+
+  useEffect(() => {
     void fetchMessages(chatId).finally(() => setLoadingMessages(false));
     void chatsApi.markRead(chatId).catch(() => undefined);
+  }, [chatId, fetchMessages]);
+
+  // Keep open chat (do not navigate away) and refill if WS bounced while here.
+  useEffect(() => {
+    const unsub = wsManager.onStateChange((state) => {
+      if (state === 'connected') {
+        void fetchMessages(chatId);
+      }
+    });
+    return unsub;
   }, [chatId, fetchMessages]);
 
   useEffect(() => {

@@ -3,6 +3,22 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-12 — Fase 7.3 Reconexión WS + mensajes perdidos
+
+### Demostrado
+
+API `api.synapmsg.ai`, script `apps/api/scripts/proof-ws-reconnect-catchup.js` → `ok:true`.
+
+1. Dos clientes WS (cuentas Toscana `4729679274` y Samsung `7751806459`) conectados; `railway restart -y`.
+2. Ambos vuelven a conectar solos con backoff 1→2→4→8 s.
+3. Mensaje enviado en el reinicio; al volver, el receptor lo obtiene por REST (`fetchMessages` / lista) — `bSawViaRest: true`.
+4. App: `WebSocketManager` ya tenía ese backoff; `catchUpAfterReconnect` + `activeChatId` en ChatScreen para no saltar mensajes ni salir del chat abierto.
+
+### Todavía no
+
+- Prueba visual en **dos APK físicos** a la vez (solo Toscana USB conectado; Samsung no estaba en `adb devices`). El script usó dos clientes WS, no la UI del teléfono.
+- El catch-up nuevo en mobile requiere APK nuevo instalado.
+
 ## 2026-11-12 — Fase 7.2 Límite de intentos (login / registro)
 
 ### Demostrado
@@ -11,7 +27,7 @@ API `api.synapmsg.ai` + prueba local `127.0.0.1:3099` (Railway no respeta `X-For
 
 1. Login: 5 fallos → 401; el 6.º → **429** (`code: rate_limited`). Scripts `proof-rate-limit-login.js`.
 2. Registro/bootstrap: 5 altas → 201; el 6.º → **429**. Script `proof-rate-limit-register.js` en producción.
-3. Otra IP (local, cabecera `X-Forwarded-For` distinta): no hereda el límite; login correcto con `Fido2Prove_26` obtiene token.
+3. Otra IP (local, cabecera `X-Forwarded-For` distinta): no hereda el límite; login con clave correcta responde 200 (`requiresWebAuthn` / ticket — la clave pasó el rate limit).
 4. El límite es ventana de 1 minuto por IP (no ban permanente). Log: `[rate-limit] ip=… path=… name=auth-login|auth-register`.
 
 ### Todavía no

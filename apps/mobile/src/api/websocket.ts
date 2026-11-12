@@ -17,6 +17,7 @@ import type { WsClientMessage, WsServerMessage, WsConnectionState } from '../typ
 type MessageListener = (msg: WsServerMessage) => void;
 type StateListener = (state: WsConnectionState) => void;
 
+/** Cap after the required 1 → 2 → 4 → 8 s steps. */
 const MAX_BACKOFF_MS = 30_000;
 const BACKOFF_STEPS = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
 

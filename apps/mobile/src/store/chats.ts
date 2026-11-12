@@ -43,10 +43,15 @@ interface ChatsState {
   chats: Chat[];
   messagesByChat: Record<string, Message[]>;
   unreadByChat: Record<string, number>;
+  /** Chat currently open on screen (for reconnect catch-up). */
+  activeChatId: string | null;
   isLoading: boolean;
   sendingChatId: string | null;
   error: string | null;
 
+  setActiveChatId: (chatId: string | null) => void;
+  /** After WS drop: refresh open chats so missed frames are not skipped. */
+  catchUpAfterReconnect: () => Promise<void>;
   fetchChats: () => Promise<void>;
   fetchMessages: (chatId: string) => Promise<void>;
   sendMessage: (
@@ -215,9 +220,32 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
   chats: [],
   messagesByChat: {},
   unreadByChat: {},
+  activeChatId: null,
   isLoading: false,
   sendingChatId: null,
   error: null,
+
+  setActiveChatId: (chatId) => set({ activeChatId: chatId }),
+
+  catchUpAfterReconnect: async () => {
+    const { activeChatId, messagesByChat, fetchChats, fetchMessages } = get();
+    const ids = new Set<string>(Object.keys(messagesByChat));
+    if (activeChatId) ids.add(activeChatId);
+    try {
+      await fetchChats();
+    } catch {
+      /* keep going — messages still matter */
+    }
+    await Promise.all(
+      [...ids].map(async (id) => {
+        try {
+          await fetchMessages(id);
+        } catch {
+          /* per-chat failure is non-fatal */
+        }
+      }),
+    );
+  },
 
   fetchChats: async () => {
     set({ isLoading: true, error: null });
@@ -741,6 +769,7 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
       chats: [],
       messagesByChat: {},
       unreadByChat: {},
+      activeChatId: null,
       isLoading: false,
       sendingChatId: null,
       error: null,
@@ -755,6 +784,18 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
 export function registerWebSocketListener(): () => void {
   if (wsListenerRegistered) return () => {};
   wsListenerRegistered = true;
+
+  let sawDisconnect = false;
+  const unsubState = wsManager.onStateChange((state) => {
+    if (state === 'disconnected' || state === 'connecting') {
+      sawDisconnect = true;
+      return;
+    }
+    if (state === 'connected' && sawDisconnect) {
+      sawDisconnect = false;
+      void useChatsStore.getState().catchUpAfterReconnect();
+    }
+  });
 
   const unsubscribe = wsManager.onMessage((msg) => {
     if (msg.type === 'message' && msg.message) {
@@ -772,6 +813,7 @@ export function registerWebSocketListener(): () => void {
   });
   return () => {
     wsListenerRegistered = false;
+    unsubState();
     unsubscribe();
   };
 }
