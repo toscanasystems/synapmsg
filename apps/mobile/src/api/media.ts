@@ -25,14 +25,11 @@ export async function fetchMediaQuota(): Promise<MediaQuota> {
  * Upload always hits the direct API (not the CF tunnel).
  * Large base64 bodies through the Worker proxy often time out / 413.
  */
-export async function uploadLocalFile(
-  uri: string,
+export async function uploadBase64(
+  dataBase64: string,
   contentType: string,
 ): Promise<UploadResult> {
-  const base64 = await FileSystem.readAsStringAsync(uri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-  if (!base64 || base64.length < 8) {
+  if (!dataBase64 || dataBase64.length < 8) {
     throw new Error('No se pudo leer el archivo local');
   }
   const token = getAuthToken();
@@ -40,7 +37,7 @@ export async function uploadLocalFile(
     '/media/upload',
     {
       contentType,
-      dataBase64: base64,
+      dataBase64,
     },
     {
       baseURL: DIRECT_API_BASE_URL,
@@ -54,4 +51,14 @@ export async function uploadLocalFile(
     throw new Error('Upload sin URL de media');
   }
   return data;
+}
+
+export async function uploadLocalFile(
+  uri: string,
+  contentType: string,
+): Promise<UploadResult> {
+  const base64 = await FileSystem.readAsStringAsync(uri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  return uploadBase64(base64, contentType);
 }

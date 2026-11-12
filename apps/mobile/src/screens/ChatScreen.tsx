@@ -498,11 +498,29 @@ export function ChatScreen(): JSX.Element {
       opts?: { viewOnce?: boolean },
     ) => {
       try {
-        const uploaded = await uploadLocalFile(uri, contentType);
+        const {
+          embedMediaMeta,
+          readUriAsBytes,
+          sealMediaBytes,
+        } = await import('../crypto/mediaSeal');
+        const { uploadBase64 } = await import('../api/media');
+        const plain = await readUriAsBytes(uri);
+        const { sealed, meta } = sealMediaBytes(plain, contentType);
+        let sealedB64 = '';
+        for (let i = 0; i < sealed.length; i++) {
+          sealedB64 += String.fromCharCode(sealed[i]!);
+        }
+        sealedB64 = globalThis.btoa(sealedB64);
+        // Upload already-sealed bytes; store thinks it's opaque binary.
+        const uploaded = await uploadBase64(
+          sealedB64,
+          'application/octet-stream',
+        );
         if (!uploaded.url) {
           throw new Error('El servidor no devolvió URL de media');
         }
-        await sendMessage(chatId, caption, {
+        const body = embedMediaMeta(caption, meta);
+        await sendMessage(chatId, body, {
           mediaUrl: uploaded.url,
           mediaType: uploaded.mediaType || mediaType,
           viewOnce: Boolean(opts?.viewOnce),

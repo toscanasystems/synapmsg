@@ -3,6 +3,21 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-12 — Fase 6.3 Fotos/archivos cifrados al salir del teléfono
+
+### Demostrado
+
+API + R2 (`media.synapmsg.ai`), script `proof-media-seal.js` → `ok:true`. Cuenta Toscana.
+
+1. PNG sellado con nacl.secretbox antes del upload (`application/octet-stream`).
+2. El objeto en el almacén no tiene cabecera PNG (`storeOpaque: true`).
+3. Con la clave del mensaje se recupera el PNG (`openedWithKey: true`).
+4. App: `sendMedia` sella ≤25 MB y embebe `@@synapmedia:…@@` en el texto; `ChatBubble` descifra al mostrar.
+
+### Todavía no
+
+- Prueba visual de imagen en dos teléfonos con APK nuevo instalado.
+
 ## 2026-11-12 — Fase 6.2 Mensajes que se borran solos
 
 ### Demostrado

@@ -2,7 +2,7 @@
  * ChatBubble — texto + imagen/audio/archivo + reacciones / editar.
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,13 @@ import colors from '../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
 import { Message, languageLabel } from '../types';
 import { TranslationBadge } from './TranslationBadge';
+import {
+  extractMediaMeta,
+  extForContentType,
+  openMediaBytes,
+  writeBytesToCache,
+  type MediaSealMeta,
+} from '../crypto/mediaSeal';
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'] as const;
 
@@ -81,6 +88,44 @@ export function ChatBubble({
   const [editOpen, setEditOpen] = useState(false);
   const [editText, setEditText] = useState(message.originalText);
   const [ephemeralUri, setEphemeralUri] = useState<string | null>(null);
+  const [openedMediaUri, setOpenedMediaUri] = useState<string | null>(null);
+
+  const mediaFromText = useMemo(() => {
+    const a = extractMediaMeta(message.originalText);
+    const b = extractMediaMeta(message.translatedText);
+    return a.meta ? a : b;
+  }, [message.originalText, message.translatedText]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const meta = mediaFromText.meta;
+    const remote = message.mediaUrl;
+    if (!meta || !remote || message.deletedAt) {
+      setOpenedMediaUri(null);
+      return;
+    }
+    void (async () => {
+      try {
+        const res = await fetch(remote);
+        const buf = new Uint8Array(await res.arrayBuffer());
+        const plain = openMediaBytes(buf, meta as MediaSealMeta);
+        const path = await writeBytesToCache(
+          plain,
+          extForContentType(meta.ct || 'application/octet-stream'),
+        );
+        if (!cancelled) setOpenedMediaUri(path);
+      } catch (err) {
+        console.warn(
+          '[mediaSeal] open failed',
+          err instanceof Error ? err.message : err,
+        );
+        if (!cancelled) setOpenedMediaUri(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mediaFromText.meta, message.mediaUrl, message.deletedAt]);
 
   const viewOncePending =
     Boolean(message.viewOnce) &&
@@ -114,12 +159,15 @@ export function ChatBubble({
     );
   };
 
-  const displayText = isMine
-    ? message.originalText
-    : message.translatedText || message.originalText;
+  const displayText = mediaFromText.meta
+    ? mediaFromText.text
+    : isMine
+      ? message.originalText
+      : message.translatedText || message.originalText;
+  const mediaUri = ephemeralUri || openedMediaUri || message.mediaUrl;
 
   const playAudio = async (uri?: string | null) => {
-    const src = uri || ephemeralUri || message.mediaUrl;
+    const src = uri || mediaUri;
     if (!src) return;
     try {
       setPlaying(true);
@@ -295,12 +343,11 @@ export function ChatBubble({
 
             {!message.deletedAt &&
             message.mediaType === 'image' &&
-            (message.mediaUrl || ephemeralUri) ? (
+            mediaUri ? (
               <Pressable
                 onPress={() => {
-                  const uri = ephemeralUri || message.mediaUrl!;
+                  const uri = mediaUri;
                   if (ephemeralUri) {
-                    // Already opened view-once — show fullscreen then clear.
                     Linking.openURL(uri).finally(() => setEphemeralUri(null));
                     return;
                   }
@@ -308,7 +355,7 @@ export function ChatBubble({
                 }}
               >
                 <Image
-                  source={{ uri: ephemeralUri || message.mediaUrl! }}
+                  source={{ uri: mediaUri }}
                   style={styles.image}
                   resizeMode="cover"
                 />
@@ -335,10 +382,10 @@ export function ChatBubble({
 
             {!message.deletedAt &&
             message.mediaType === 'audio' &&
-            (message.mediaUrl || ephemeralUri) ? (
+            mediaUri ? (
               <Pressable
                 style={styles.audioRow}
-                onPress={() => void playAudio(ephemeralUri || message.mediaUrl)}
+                onPress={() => void playAudio(mediaUri)}
               >
                 <Feather
                   name={playing ? 'pause' : 'play'}
@@ -353,10 +400,10 @@ export function ChatBubble({
               </Pressable>
             ) : null}
 
-            {!message.deletedAt && message.mediaType === 'file' && message.mediaUrl ? (
+            {!message.deletedAt && message.mediaType === 'file' && mediaUri ? (
               <Pressable
                 style={styles.audioRow}
-                onPress={() => Linking.openURL(message.mediaUrl!)}
+                onPress={() => Linking.openURL(mediaUri)}
               >
                 <Feather
                   name="file-text"
