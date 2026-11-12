@@ -1,5 +1,6 @@
 import { Nav } from "@/components/Nav";
 import { Hero } from "@/components/Hero";
+import { HowItWorks } from "@/components/HowItWorks";
 import { SecurityExplained } from "@/components/SecurityExplained";
 import { Features } from "@/components/Features";
 import { HowToStart } from "@/components/HowToStart";
@@ -12,6 +13,7 @@ export default function Home() {
     <main className="min-h-screen bg-primary-soft">
       <Nav />
       <Hero />
+      <HowItWorks />
       <SecurityExplained />
       <Features />
       <HowToStart />

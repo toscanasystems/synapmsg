@@ -1,5 +1,41 @@
 ﻿"use client";
 
+import {
+  IlluPhoneNumber,
+  IlluShareNoSearch,
+  IlluEncryptBeforeServer,
+} from "./Illustrations";
+
+const STEPS = [
+  {
+    n: "1",
+    title: "Descarga y entra sin dar tu correo",
+    lines: [
+      "Se te asigna un número propio de 10 dígitos.",
+      "Sin teléfono, sin correo.",
+    ],
+    Illu: IlluPhoneNumber,
+  },
+  {
+    n: "2",
+    title: "Comparte ese número solo con quien quieras",
+    lines: [
+      "No hay buscador de perfiles.",
+      "Nadie te encuentra si no le das el número.",
+    ],
+    Illu: IlluShareNoSearch,
+  },
+  {
+    n: "3",
+    title: "Escribe: se cifra en tu teléfono antes de salir",
+    lines: [
+      "El servidor guarda un paquete que no puede leer.",
+      "Y si quieres, traduce sin que el texto salga.",
+    ],
+    Illu: IlluEncryptBeforeServer,
+  },
+] as const;
+
 export function Hero() {
   return (
     <section
@@ -11,7 +47,7 @@ export function Hero() {
         <div className="absolute bottom-0 right-0 h-72 w-72 rounded-full bg-accent-dark/20 blur-3xl" />
       </div>
 
-      <div className="relative mx-auto flex min-h-[100svh] max-w-6xl flex-col justify-center px-6 pb-20 pt-28 md:pt-32">
+      <div className="relative mx-auto flex min-h-[100svh] max-w-6xl flex-col justify-center px-6 pb-16 pt-28 md:pt-32">
         <div className="mb-8 animate-fade-in">
           <img
             src="/synapmsg-logo.png"
@@ -30,6 +66,33 @@ export function Hero() {
           y la app te avisa antes de crearlo. La traducción en un chat Privado ocurre en tu
           teléfono: el texto no sale de ahí.
         </p>
+
+        <ol className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 animate-slide-up">
+          {STEPS.map((step) => (
+            <li
+              key={step.n}
+              className="flex gap-4 items-start border-t border-white/10 pt-5"
+            >
+              <step.Illu className="h-20 w-24 shrink-0" />
+              <div className="min-w-0">
+                <p className="text-accent text-sm font-medium mb-1">
+                  Paso {step.n}
+                </p>
+                <h2 className="text-base font-semibold text-white leading-snug mb-2">
+                  {step.title}
+                </h2>
+                {step.lines.map((line) => (
+                  <p
+                    key={line}
+                    className="text-sm text-gray-400 leading-relaxed"
+                  >
+                    {line}
+                  </p>
+                ))}
+              </div>
+            </li>
+          ))}
+        </ol>
 
         <div className="mt-10 flex flex-wrap gap-3 animate-slide-up">
           <a
