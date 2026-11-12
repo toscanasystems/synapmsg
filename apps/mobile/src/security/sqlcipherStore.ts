@@ -7,6 +7,7 @@ import * as FileSystem from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 import nacl from 'tweetnacl';
 import { getSqlCipherNative } from 'synap-sqlcipher';
+import { ensureNaclPrng } from './secureVault';
 
 const DB_DIR = `${FileSystem.documentDirectory ?? ''}synap_sqlcipher/`;
 const DB_FILE = `${DB_DIR}messages.v1.db.enc`;
@@ -40,6 +41,7 @@ function unb64(s: string): Uint8Array {
 }
 
 async function dbKey(): Promise<Uint8Array> {
+  ensureNaclPrng();
   let raw = await SecureStore.getItemAsync(DB_KEY, SECURE_OPTS);
   if (!raw) {
     const key = nacl.randomBytes(nacl.secretbox.keyLength);
@@ -51,6 +53,7 @@ async function dbKey(): Promise<Uint8Array> {
 }
 
 async function ndkPassphrase(): Promise<string> {
+  ensureNaclPrng();
   let raw = await SecureStore.getItemAsync(NDK_PASSPHRASE_KEY, SECURE_OPTS);
   if (!raw) {
     const key = nacl.randomBytes(32);

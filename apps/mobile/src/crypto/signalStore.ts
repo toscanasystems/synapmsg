@@ -1,7 +1,7 @@
 /**
  * On-device Signal Protocol store.
- * Private keys and sessions live in the app documents dir (survive app kill).
- * Nothing here is uploaded to the server.
+ * Private key material (identity, prekeys) → OS SecureStore / Keystore.
+ * Session records stay in app documents (survive kill; not uploaded).
  */
 
 import * as FileSystem from 'expo-file-system';
@@ -11,6 +11,11 @@ import {
   SessionRecordType,
   StorageType,
 } from '@privacyresearch/libsignal-protocol-typescript';
+import {
+  secureDel,
+  secureGet,
+  securePut,
+} from '../security/secureVault';
 
 const ROOT = `${FileSystem.documentDirectory ?? ''}synap_signal_v2/`;
 
@@ -96,13 +101,51 @@ export class SecureSignalStore implements StorageType {
     if (info.exists) await FileSystem.deleteAsync(p, { idempotent: true });
   }
 
+  private sk(suffix: string): string {
+    // Expo SecureStore key length limit — keep short.
+    return `ssig_${safeName(this.deviceId).slice(0, 24)}_${safeName(suffix).slice(0, 40)}`;
+  }
+
+  private async readSecret(suffix: string, fileFallback: string): Promise<string | null> {
+    const fromSecure = await secureGet(this.sk(suffix));
+    if (fromSecure) return fromSecure;
+    const legacy = await this.read(fileFallback);
+    if (legacy) {
+      try {
+        await securePut(this.sk(suffix), legacy);
+        await this.del(fileFallback);
+        console.log('[signalStore] migrated', fileFallback, '→ SecureStore');
+      } catch (err) {
+        console.warn(
+          '[signalStore] SecureStore migrate failed; file left in place',
+          err instanceof Error ? err.message : err,
+        );
+      }
+      return legacy;
+    }
+    return null;
+  }
+
+  private async writeSecret(suffix: string, value: string, fileFallback: string): Promise<void> {
+    try {
+      await securePut(this.sk(suffix), value);
+      await this.del(fileFallback).catch(() => undefined);
+    } catch (err) {
+      console.warn(
+        '[signalStore] SecureStore write failed → file fallback (logged)',
+        err instanceof Error ? err.message : err,
+      );
+      await this.write(fileFallback, value);
+    }
+  }
+
   async getIdentityKeyPair(): Promise<KeyPairType | undefined> {
-    const raw = await this.read('identity.json');
+    const raw = await this.readSecret('identity', 'identity.json');
     return raw ? deKeyPair(raw) : undefined;
   }
 
   async setIdentityKeyPair(kp: KeyPairType): Promise<void> {
-    await this.write('identity.json', serKeyPair(kp));
+    await this.writeSecret('identity', serKeyPair(kp), 'identity.json');
   }
 
   async getLocalRegistrationId(): Promise<number | undefined> {
@@ -178,12 +221,12 @@ export class SecureSignalStore implements StorageType {
   }
 
   async loadPreKey(keyId: string | number): Promise<KeyPairType | undefined> {
-    const raw = await this.read(`pk_${keyId}.json`);
+    const raw = await this.readSecret(`pk_${keyId}`, `pk_${keyId}.json`);
     return raw ? deKeyPair(raw) : undefined;
   }
 
   async storePreKey(keyId: number | string, keyPair: KeyPairType): Promise<void> {
-    await this.write(`pk_${keyId}.json`, serKeyPair(keyPair));
+    await this.writeSecret(`pk_${keyId}`, serKeyPair(keyPair), `pk_${keyId}.json`);
   }
 
   /**
@@ -199,6 +242,7 @@ export class SecureSignalStore implements StorageType {
     const ids = [...this.deferredPreKeyRemovals];
     this.deferredPreKeyRemovals.clear();
     for (const id of ids) {
+      await secureDel(this.sk(`pk_${id}`));
       await this.del(`pk_${id}.json`);
     }
   }
@@ -225,7 +269,7 @@ export class SecureSignalStore implements StorageType {
   async loadSignedPreKey(
     keyId: number | string,
   ): Promise<KeyPairType | undefined> {
-    const raw = await this.read(`spk_${keyId}.json`);
+    const raw = await this.readSecret(`spk_${keyId}`, `spk_${keyId}.json`);
     return raw ? deKeyPair(raw) : undefined;
   }
 
@@ -233,10 +277,15 @@ export class SecureSignalStore implements StorageType {
     keyId: number | string,
     keyPair: KeyPairType,
   ): Promise<void> {
-    await this.write(`spk_${keyId}.json`, serKeyPair(keyPair));
+    await this.writeSecret(
+      `spk_${keyId}`,
+      serKeyPair(keyPair),
+      `spk_${keyId}.json`,
+    );
   }
 
   async removeSignedPreKey(keyId: number | string): Promise<void> {
+    await secureDel(this.sk(`spk_${keyId}`));
     await this.del(`spk_${keyId}.json`);
   }
 
@@ -265,6 +314,11 @@ export class SecureSignalStore implements StorageType {
 
   async wipeAll(): Promise<void> {
     await this.rw();
+    await secureDel(this.sk('identity'));
+    for (let i = 1; i <= 40; i++) {
+      await secureDel(this.sk(`pk_${i}`));
+      await secureDel(this.sk(`spk_${i}`));
+    }
     const info = await FileSystem.getInfoAsync(this.base());
     if (info.exists) {
       await FileSystem.deleteAsync(this.base(), { idempotent: true });

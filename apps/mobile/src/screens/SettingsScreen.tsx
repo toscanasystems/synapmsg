@@ -922,15 +922,17 @@ export function SettingsScreen(): JSX.Element {
           <SettingsRow
             icon="shield"
             iconBg="#30B0B0"
-            title="Enclave / integridad"
+            title="Enclave / almacén de claves"
             subtitle={
               deviceRisk
                 ? `${deviceRisk.native ? 'Nativo' : 'JS'} · ${
                     deviceRisk.strongBox ? 'StrongBox/SE' : 'Keystore'
                   } · ${
-                    deviceRisk.risky
-                      ? `riesgo: ${deviceRisk.reasons.slice(0, 3).join(',')}`
-                      : 'OK'
+                    deviceRisk.reasons.includes('root')
+                      ? 'root detectado'
+                      : deviceRisk.risky
+                        ? `riesgo: ${deviceRisk.reasons.slice(0, 3).join(',')}`
+                        : 'OK'
                   }`
                 : 'Sondeando…'
             }
@@ -940,17 +942,34 @@ export function SettingsScreen(): JSX.Element {
                 setDeviceRisk(r);
                 const sql = await sqlCipherNativeStatus();
                 const sig = await libsignalNativeStatus();
+                const { getVaultStatus, ensureNaclPrng } = await import(
+                  '../security/secureVault'
+                );
+                try {
+                  ensureNaclPrng();
+                } catch {
+                  /* status recorded */
+                }
+                const vault = await getVaultStatus();
+                const rooted = r.reasons.includes('root');
                 Alert.alert(
-                  'Integridad del dispositivo',
+                  'Almacén e integridad',
                   [
+                    `Almacén usado: ${vault.backend}`,
+                    `PRNG: ${vault.prngOk ? 'ok' : 'FALLÓ'}`,
+                    vault.lastError ? `Error vault: ${vault.lastError}` : null,
+                    vault.note,
                     `Enclave nativo: ${r.native ? 'sí' : 'no'}`,
                     `StrongBox/SE: ${r.strongBox ? 'sí' : 'no'}`,
+                    rooted
+                      ? 'Root detectado: el almacén del sistema puede ser eludible. No prometemos que sea imposible de saltar.'
+                      : 'Sin root reportado por el sondeo.',
                     `SQLCipher NDK: ${sql.native ? sql.engine + ' ' + sql.version : 'fallback file'}`,
                     `libsignal JNI: ${sig.native ? sig.implementation + ' ' + sig.version : 'TS protocol'}`,
-                    `Wire nuevo: libsignal (legacy PQ apagado)`,
-                    `File fallback: ${SQLCIPHER_STATUS.engine}`,
                     `Razones: ${r.reasons.join(', ') || 'ninguna'}`,
-                  ].join('\n'),
+                  ]
+                    .filter(Boolean)
+                    .join('\n'),
                 );
               })();
             }}

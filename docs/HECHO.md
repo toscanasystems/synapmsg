@@ -25,9 +25,24 @@ Privado 1:1 Toscana SM-A356E (`RFCX41A9NQL`) ↔ Samsung SM-A566E (`R5CYA03YERH`
 
 ### Todavía no (no afirmar en marketing)
 
-- StrongBox como paquete cerrado.
+- StrongBox como única vía cerrada (el sondeo existe; no se afirma resistencia total).
 - Grupos E2E con libsignal; verificación QR escaneada en APK de release.
 - Llamadas, canales, archivos grandes como promesas cerradas.
+
+## 2026-11-12 — Fase 5.4 Almacén seguro de claves
+
+### Demostrado
+
+Samsung SM-A566E (`R5CYA03YERH`), APK versionCode **76**. `synapmsg://prove/vault` → `SynapVaultProve` `ok:true`.
+
+1. PRNG con `expo-crypto` (`prngOk: true`); sin error `no PRNG`.
+2. Roundtrip vault + SecureStore; `backend: SecureStore`; log `[secureVault] backend= SecureStore`.
+3. Identidad Signal presente tras reinicio de proceso (`hasSignalIdentity: true`).
+4. Ajustes muestra almacén usado / PRNG; si hay root, el texto indica que puede ser eludible (sin promesa de imposibilidad).
+
+### Todavía no
+
+- Sesiones Signal aún en documents del app (no Keystore); identidad/prekeys sí en SecureStore.
 
 ## 2026-11-12 — Fase 5.3 Aviso de inactividad
 

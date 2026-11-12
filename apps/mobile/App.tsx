@@ -159,6 +159,17 @@ export default function App(): JSX.Element {
         })();
         return;
       }
+      if (url.includes('prove/vault')) {
+        void import('./src/security/proveVault').then(async (m) => {
+          if (!m.parseVaultProveUrl(url)) return;
+          for (let i = 0; i < 40; i++) {
+            if (useAuthStore.getState().isHydrated) break;
+            await new Promise((r) => setTimeout(r, 250));
+          }
+          await m.runVaultProof();
+        });
+        return;
+      }
       void import('./src/security/provePhase4').then(async (m) => {
         const parsed = m.parsePhase4ProveUrl(url);
         if (!parsed) return;
