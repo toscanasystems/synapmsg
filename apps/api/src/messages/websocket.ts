@@ -218,6 +218,9 @@ export function serializeMessage(
     reactions?: ReactionSummary[];
     replyTo?: ReplyPreview | null;
     viewerId?: string;
+    /** Per-viewer group envelope (fan-out). */
+    ciphertextOverride?: string | null;
+    ciphertextTypeOverride?: number | null;
   },
 ): WsMessagePayload {
   if (msg.deletedAt) {
@@ -269,8 +272,14 @@ export function serializeMessage(
     isTranslated: isE2e ? false : msg.isTranslated,
     mediaUrl: viewOnceLocked ? null : msg.mediaUrl ?? null,
     mediaType: msg.mediaType ?? null,
-    ciphertext: msg.ciphertext ?? null,
-    ciphertextType: msg.ciphertextType ?? null,
+    ciphertext:
+      opts?.ciphertextOverride !== undefined
+        ? opts.ciphertextOverride
+        : msg.ciphertext ?? null,
+    ciphertextType:
+      opts?.ciphertextTypeOverride !== undefined
+        ? opts.ciphertextTypeOverride
+        : msg.ciphertextType ?? null,
     isE2e,
     editedAt: msg.editedAt ? msg.editedAt.toISOString() : null,
     deletedAt: null,
@@ -338,6 +347,12 @@ function computeExpiresAt(
   return new Date(Date.now() + hours * 60 * 60 * 1000);
 }
 
+export type RecipientEnvelope = {
+  recipientUserId: string;
+  ciphertext: string;
+  ciphertextType?: number;
+};
+
 export async function createAndBroadcastMessage(
   chatId: string,
   senderId: string,
@@ -349,10 +364,21 @@ export async function createAndBroadcastMessage(
     ciphertext?: string | null;
     ciphertextType?: number | null;
     viewOnce?: boolean;
+    /** Group E2E: one libsignal envelope per other member (≤49). */
+    recipientEnvelopes?: RecipientEnvelope[];
   },
 ): Promise<{ message: WsMessagePayload; raw: DbMessage }> {
+  const fanout = Array.isArray(media?.recipientEnvelopes)
+    ? media!.recipientEnvelopes!.filter(
+        (e) =>
+          typeof e?.recipientUserId === 'string' &&
+          typeof e?.ciphertext === 'string' &&
+          e.ciphertext.trim().length >= 16,
+      )
+    : [];
   const hasCipher =
-    typeof media?.ciphertext === 'string' && media.ciphertext.trim().length > 0;
+    (typeof media?.ciphertext === 'string' && media.ciphertext.trim().length > 0) ||
+    fanout.length > 0;
 
   if (!hasCipher && (typeof text !== 'string' || !text.trim())) {
     throw new HttpError(400, 'text is required and must be non-empty');
@@ -420,13 +446,55 @@ export async function createAndBroadcastMessage(
 
   // Private path: opaque envelope only — never translate / never keep plaintext.
   if (e2eMode && hasCipher) {
+    const isGroup = chat.type === 'group';
+    if (isGroup && fanout.length > 0) {
+      const memberIds = new Set(chat.participants.map((p) => p.userId));
+      const others = chat.participants.filter((p) => p.userId !== senderId);
+      if (others.length > 49) {
+        throw new HttpError(400, 'Grupo Privado: máximo 50 miembros (incl. tú)');
+      }
+      for (const e of fanout) {
+        if (!memberIds.has(e.recipientUserId) || e.recipientUserId === senderId) {
+          throw new HttpError(400, 'Sobre de grupo para destinatario inválido');
+        }
+      }
+      const byRecipient = new Map(
+        fanout.map((e) => [
+          e.recipientUserId,
+          {
+            ciphertext: e.ciphertext.trim(),
+            ciphertextType:
+              typeof e.ciphertextType === 'number' ? e.ciphertextType : 3,
+          },
+        ]),
+      );
+      for (const o of others) {
+        if (!byRecipient.has(o.userId)) {
+          throw new HttpError(
+            400,
+            'Grupo Privado: falta el sobre cifrado para un miembro',
+          );
+        }
+      }
+    }
+
+    const primaryCipher =
+      typeof media?.ciphertext === 'string' && media.ciphertext.trim().length >= 16
+        ? media.ciphertext.trim()
+        : fanout[0]?.ciphertext.trim() || '';
+    const primaryType =
+      typeof media?.ciphertextType === 'number'
+        ? media.ciphertextType
+        : typeof fanout[0]?.ciphertextType === 'number'
+          ? fanout[0]!.ciphertextType!
+          : 3;
+
     let envelope;
     try {
       envelope = buildPrivateMessageDbFields(
         {
-          ciphertext: media!.ciphertext!.trim(),
-          ciphertextType:
-            typeof media?.ciphertextType === 'number' ? media.ciphertextType : 1,
+          ciphertext: primaryCipher,
+          ciphertextType: primaryType,
           mediaUrl: media?.mediaUrl || null,
           mediaType: media?.mediaType || null,
           replyToId,
@@ -452,6 +520,18 @@ export async function createAndBroadcastMessage(
     });
     assertPrivateRowOpaque(message, typeof text === 'string' ? text : undefined);
 
+    if (fanout.length > 0) {
+      await prisma.messageRecipientCipher.createMany({
+        data: fanout.map((e) => ({
+          messageId: message.id,
+          recipientUserId: e.recipientUserId,
+          ciphertext: e.ciphertext.trim(),
+          ciphertextType:
+            typeof e.ciphertextType === 'number' ? e.ciphertextType : 3,
+        })),
+      });
+    }
+
     await prisma.chat
       .update({ where: { id: chatId }, data: { updatedAt: new Date() } })
       .catch(() => undefined);
@@ -461,11 +541,24 @@ export async function createAndBroadcastMessage(
       username: sender.username,
       name: sender.name,
     };
+    const deliveryRows =
+      fanout.length > 0
+        ? await prisma.messageRecipientCipher.findMany({
+            where: { messageId: message.id },
+          })
+        : [];
+    const deliveryMap = new Map(
+      deliveryRows.map((d) => [d.recipientUserId, d]),
+    );
+
     let senderWire: WsMessagePayload | null = null;
     for (const participant of chat.participants) {
+      const del = deliveryMap.get(participant.userId);
       const wire = serializeMessage(message, senderInfo, {
         replyTo: replyPreview,
         viewerId: participant.userId,
+        ciphertextOverride: del ? del.ciphertext : message.ciphertext,
+        ciphertextTypeOverride: del ? del.ciphertextType : message.ciphertextType,
       });
       if (participant.userId === senderId) senderWire = wire;
       sendToUser(participant.userId, {

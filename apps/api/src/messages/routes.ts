@@ -59,7 +59,10 @@ type MsgWithRelations = {
   } | null;
 };
 
-function serializeDbMessage(msg: MsgWithRelations, meId: string): WsMessagePayload {
+async function serializeDbMessage(
+  msg: MsgWithRelations,
+  meId: string,
+): Promise<WsMessagePayload> {
   const replyTo = msg.replyTo
     ? {
         id: msg.replyTo.id,
@@ -71,6 +74,22 @@ function serializeDbMessage(msg: MsgWithRelations, meId: string): WsMessagePaylo
             : (msg.replyTo.originalText || '').slice(0, 140),
       }
     : null;
+  let ciphertextOverride: string | null | undefined;
+  let ciphertextTypeOverride: number | null | undefined;
+  if (msg.isE2e && meId !== msg.senderId) {
+    const del = await prisma.messageRecipientCipher.findUnique({
+      where: {
+        messageId_recipientUserId: {
+          messageId: msg.id,
+          recipientUserId: meId,
+        },
+      },
+    });
+    if (del) {
+      ciphertextOverride = del.ciphertext;
+      ciphertextTypeOverride = del.ciphertextType;
+    }
+  }
   return serializeMessage(
     msg,
     {
@@ -82,6 +101,8 @@ function serializeDbMessage(msg: MsgWithRelations, meId: string): WsMessagePaylo
       reactions: summarizeReactions(msg.reactions, meId),
       replyTo,
       viewerId: meId,
+      ciphertextOverride,
+      ciphertextTypeOverride,
     },
   );
 }
@@ -139,7 +160,9 @@ router.get('/:chatId/messages', async (req: Request, res: Response, next: NextFu
 
     const ascending = [...messages].reverse();
     res.json({
-      messages: ascending.map((m) => serializeDbMessage(m, req.user!.id)),
+      messages: await Promise.all(
+        ascending.map((m) => serializeDbMessage(m, req.user!.id)),
+      ),
       pagination: {
         page,
         limit,
@@ -174,6 +197,7 @@ router.post('/:chatId/messages', async (req: Request, res: Response, next: NextF
       ciphertext,
       ciphertextType,
       viewOnce,
+      recipientEnvelopes,
     } = (req.body ?? {}) as {
         text?: unknown;
         mediaUrl?: unknown;
@@ -183,9 +207,25 @@ router.post('/:chatId/messages', async (req: Request, res: Response, next: NextF
         ciphertext?: unknown;
         ciphertextType?: unknown;
         viewOnce?: unknown;
+        recipientEnvelopes?: unknown;
       };
+    const envelopes = Array.isArray(recipientEnvelopes)
+      ? recipientEnvelopes
+          .filter(
+            (e): e is { recipientUserId: string; ciphertext: string; ciphertextType?: number } =>
+              Boolean(
+                e &&
+                  typeof e === 'object' &&
+                  typeof (e as { recipientUserId?: unknown }).recipientUserId ===
+                    'string' &&
+                  typeof (e as { ciphertext?: unknown }).ciphertext === 'string',
+              ),
+          )
+          .slice(0, 49)
+      : [];
     const hasCipher =
-      typeof ciphertext === 'string' && ciphertext.trim().length > 0;
+      (typeof ciphertext === 'string' && ciphertext.trim().length > 0) ||
+      envelopes.length > 0;
     if (!hasCipher && (typeof text !== 'string' || !text.trim())) {
       res.status(400).json({ error: 'text is required and must be non-empty' });
       return;
@@ -247,10 +287,20 @@ router.post('/:chatId/messages', async (req: Request, res: Response, next: NextF
         mediaUrl: typeof mediaUrl === 'string' ? mediaUrl : null,
         mediaType: typeof mediaType === 'string' ? mediaType : null,
         replyToId: typeof replyToId === 'string' ? replyToId : null,
-        ciphertext: hasCipher ? String(ciphertext).trim() : null,
+        ciphertext:
+          typeof ciphertext === 'string' && ciphertext.trim().length > 0
+            ? String(ciphertext).trim()
+            : null,
         ciphertextType:
-          typeof ciphertextType === 'number' ? ciphertextType : hasCipher ? 1 : null,
+          typeof ciphertextType === 'number'
+            ? ciphertextType
+            : envelopes.length
+              ? 3
+              : hasCipher
+                ? 1
+                : null,
         viewOnce: viewOnce === true,
+        recipientEnvelopes: envelopes,
       },
     );
     res.status(201).json({ message: result.message });
@@ -382,13 +432,14 @@ router.patch(
         },
       });
 
+      const editedWire = await serializeDbMessage(updated, req.user!.id);
       const payload = {
         type: 'message_edited',
         chatId,
-        message: serializeDbMessage(updated, req.user!.id),
+        message: editedWire,
       };
       await broadcastToChat(chatId, payload);
-      res.json({ message: serializeDbMessage(updated, req.user!.id) });
+      res.json({ message: editedWire });
     } catch (err) {
       next(err);
     }
@@ -421,7 +472,7 @@ router.delete(
         return;
       }
       if (msg.deletedAt) {
-        res.json({ message: serializeDbMessage(msg, req.user!.id) });
+        res.json({ message: await serializeDbMessage(msg, req.user!.id) });
         return;
       }
       const updated = await prisma.message.update({
@@ -440,13 +491,17 @@ router.delete(
         },
       });
       await prisma.messageReaction.deleteMany({ where: { messageId } });
+      const deletedWire = await serializeDbMessage(
+        { ...updated, reactions: [] },
+        req.user!.id,
+      );
       const payload = {
         type: 'message_deleted',
         chatId,
-        message: serializeDbMessage({ ...updated, reactions: [] }, req.user!.id),
+        message: deletedWire,
       };
       await broadcastToChat(chatId, payload);
-      res.json({ message: serializeDbMessage({ ...updated, reactions: [] }, req.user!.id) });
+      res.json({ message: deletedWire });
     } catch (err) {
       next(err);
     }

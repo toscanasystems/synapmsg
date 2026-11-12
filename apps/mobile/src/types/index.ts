@@ -260,6 +260,12 @@ export interface SendMessageRequest {
   ciphertext?: string;
   ciphertextType?: number;
   viewOnce?: boolean;
+  /** Group Private: one libsignal envelope per other member. */
+  recipientEnvelopes?: Array<{
+    recipientUserId: string;
+    ciphertext: string;
+    ciphertextType?: number;
+  }>;
 }
 
 export interface SendMessageResponse {

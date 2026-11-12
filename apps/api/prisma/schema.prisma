@@ -275,7 +275,8 @@ model Message {
   sender    User              @relation(fields: [senderId], references: [id], onDelete: Cascade)
   replyTo   Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
   replies   Message[]         @relation("MessageReplies")
-  reactions MessageReaction[]
+  reactions          MessageReaction[]
+  recipientCiphers   MessageRecipientCipher[]
 
   @@index([chatId, createdAt])
   @@index([senderId])
@@ -283,6 +284,22 @@ model Message {
   @@index([replyToId])
   @@index([expiresAt])
   @@map("messages")
+}
+
+/// Per-member E2E envelope for group chats (fan-out libsignal).
+model MessageRecipientCipher {
+  id               String   @id @default(uuid()) @db.Uuid
+  messageId        String   @db.Uuid
+  recipientUserId  String   @db.Uuid
+  ciphertext       String
+  ciphertextType   Int      @default(3)
+  createdAt        DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, recipientUserId])
+  @@index([recipientUserId])
+  @@map("message_recipient_ciphers")
 }
 
 model MessageReaction {

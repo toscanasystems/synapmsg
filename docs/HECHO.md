@@ -3,6 +3,20 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-12 — Fase 6.1 Grupos Privados (fan-out ≤50)
+
+### Demostrado
+
+Script `packages/crypto/scripts/proof-group-e2e-three.mjs` → `ok:true` (Neon + libsignal).
+
+1. Tres cuentas A/B/C; grupo E2E; A cifra un sobre distinto para B y para C.
+2. B y C descifran el mismo plaintext; fila en `messages` opaca (`originalText`/`translatedText` vacíos; plaintext ausente en SQL).
+3. Sobres por miembro en `message_recipient_ciphers`.
+
+### Todavía no
+
+- Prueba manual de grupo en tres teléfonos físicos a la vez (lab: 2 aparatos + tercera cuenta en script).
+
 ## 2026-11-12 — Alta sin correo
 
 Alta sin correo: número único de 10 dígitos. No es una mejora de cifrado.

@@ -326,7 +326,12 @@ router.post('/:id/members', async (req: Request, res: Response, next: NextFuncti
       select: { userId: true },
     });
     const existingSet = new Set(existing.map((e) => e.userId));
-    const toAdd = ids.filter((uid) => !existingSet.has(uid));
+    const slots = Math.max(0, 50 - existing.length);
+    const toAdd = ids.filter((uid) => !existingSet.has(uid)).slice(0, slots);
+    if (slots === 0) {
+      res.status(400).json({ error: 'Grupo: máximo 50 miembros' });
+      return;
+    }
     if (toAdd.length === 0) {
       res.status(400).json({ error: 'No new members to add' });
       return;

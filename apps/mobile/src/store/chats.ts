@@ -90,6 +90,13 @@ function peerIdForChat(chat: Chat | undefined, meId: string): string | null {
   return other?.userId ?? null;
 }
 
+function otherParticipantIds(chat: Chat | undefined, meId: string): string[] {
+  if (!chat) return [];
+  return (chat.participants || [])
+    .map((p) => p.userId)
+    .filter((id) => id && id !== meId);
+}
+
 function peerLabelForChat(chat: Chat | undefined, meId: string): string {
   if (!chat) return 'contacto';
   const other = chat.participants.find((p) => p.userId !== meId);
@@ -235,7 +242,8 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
       const peerId = me ? peerIdForChat(chat, me.id) : null;
       const decrypted = await Promise.all(
         messages.map(async (m) => {
-          const fromPeer = m.senderId === me?.id ? peerId : m.senderId;
+          // Own messages: keep server placeholder / local cache; decrypt others via sender.
+          const fromPeer = m.senderId === me?.id ? null : m.senderId;
           return maybeDecryptMessage(m, fromPeer, chatId);
         }),
       );
@@ -262,18 +270,49 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
     const chat = get().chats.find((c) => c.id === chatId);
     const e2e = chat?.encryptionMode === 'e2e';
     const peerId = peerIdForChat(chat, me.id);
+    const others = otherParticipantIds(chat, me.id);
+    const isGroup = chat?.type === 'group';
 
     let ciphertext: string | undefined;
     let ciphertextType: number | undefined;
+    let recipientEnvelopes:
+      | Array<{
+          recipientUserId: string;
+          ciphertext: string;
+          ciphertextType?: number;
+        }>
+      | undefined;
     if (e2e) {
-      if (!peerId) {
+      if (others.length === 0) {
         set({ error: 'No hay destinatario para cifrar E2E' });
         return;
       }
+      if (isGroup && others.length > 49) {
+        set({ error: 'Grupo Privado: máximo 50 miembros' });
+        return;
+      }
       try {
-        const enc = await encryptMessageForPeer(peerId, trimmed);
-        ciphertext = enc.ciphertext;
-        ciphertextType = enc.ciphertextType;
+        if (isGroup) {
+          recipientEnvelopes = [];
+          for (const uid of others) {
+            const enc = await encryptMessageForPeer(uid, trimmed);
+            recipientEnvelopes.push({
+              recipientUserId: uid,
+              ciphertext: enc.ciphertext,
+              ciphertextType: enc.ciphertextType,
+            });
+          }
+          ciphertext = recipientEnvelopes[0]?.ciphertext;
+          ciphertextType = recipientEnvelopes[0]?.ciphertextType;
+        } else {
+          if (!peerId) {
+            set({ error: 'No hay destinatario para cifrar E2E' });
+            return;
+          }
+          const enc = await encryptMessageForPeer(peerId, trimmed);
+          ciphertext = enc.ciphertext;
+          ciphertextType = enc.ciphertextType;
+        }
       } catch (err) {
         if (err instanceof IdentityKeyChangedError) {
           const label = peerLabelForChat(chat, me.id);
@@ -345,6 +384,7 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
         ? {
             ciphertext,
             ciphertextType,
+            recipientEnvelopes,
             mediaUrl: media?.mediaUrl,
             mediaType: media?.mediaType,
             replyToId: media?.replyToId,
@@ -412,7 +452,11 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
     const me = useAuthStore.getState().user;
     const chat = get().chats.find((c) => c.id === chatId);
     const peerId = me ? peerIdForChat(chat, me.id) : null;
-    const fromPeer = message.senderId === me?.id ? peerId : message.senderId;
+    // Group: always decrypt with sender's session. Own echoes keep optimistic text.
+    const fromPeer =
+      message.senderId === me?.id
+        ? peerId
+        : message.senderId;
 
     void (async () => {
       const decoded = await maybeDecryptMessage(message, fromPeer, chatId);
