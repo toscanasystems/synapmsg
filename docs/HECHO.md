@@ -3,6 +3,22 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-12 — Fase 7.1 Copia de seguridad Neon (restaurable)
+
+### Demostrado
+
+Neon proyecto `synapmsg` (`rough-lab-39632646`), plan `free_v3`.
+
+1. **Respaldo automático:** historial continuo PITR con `history_retention_seconds: 21600` (6 h) en el plan free; no hay “snapshots” diarios aparte de ese historial.
+2. **Restauración real (2026-11-12 ~11:24 UTC-6):** se anotó en production el usuario Private Number `4729679274` (`userId` `49d6d7ba-…`) y su último mensaje `6e0ac4e5-…`.
+3. Se creó la rama `f7-restore-20261112-1124` desde `production` (copia punto-en-tiempo). Script `apps/api/scripts/proof-neon-restore.js` → `ok:true` (`userMatch` + mismo `latestMessageId` en la rama).
+4. Rama de prueba eliminada después de comprobar (límite de ramas del free).
+
+### Todavía no
+
+- Retención >6 h (el plan free no permite subir a 24 h vía API en esta cuenta).
+- Restaurar *sobre* production (solo se demostró restaurar a rama aparte).
+
 ## 2026-11-12 — Fase 6.6 Temas claro / oscuro
 
 ### Demostrado
