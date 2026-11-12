@@ -126,20 +126,47 @@
   const pendingIce = [];
 
   let iceServers = [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun.cloudflare.com:3478' },
   ];
+  // PIEZA 2: relay by default — peer never learns our host/srflx IP.
+  let iceTransportPolicy = 'relay';
+  const allowDirectParam = params.get('allowDirect') === '1';
+  const seenRemoteIps = [];
 
   async function loadIceFromConfig() {
     try {
-      const r = await fetch(apiBase.replace(/\/$/, '') + '/call/config');
+      const q = allowDirectParam ? '?allowDirect=1' : '';
+      const r = await fetch(apiBase.replace(/\/$/, '') + '/call/config' + q, {
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+      });
       if (!r.ok) return;
       const cfg = await r.json();
       if (Array.isArray(cfg.iceServers) && cfg.iceServers.length) {
         iceServers = cfg.iceServers;
       }
+      if (cfg.iceTransportPolicy === 'relay' || cfg.iceTransportPolicy === 'all') {
+        iceTransportPolicy = cfg.iceTransportPolicy;
+      }
+      // Never allow "all" unless server said so (trusted).
+      if (!allowDirectParam) iceTransportPolicy = 'relay';
+      postNative({
+        type: 'ice-config',
+        policy: iceTransportPolicy,
+        provider: cfg.provider || 'unknown',
+        servers: (iceServers || []).length,
+      });
     } catch (_) {}
+  }
+
+  function ipFromCandidate(cand) {
+    if (!cand) return null;
+    const s = typeof cand === 'string' ? cand : (cand.candidate || '');
+    // candidate:... foundation component protocol priority ip port typ ...
+    const m = s.match(/\s(\d{1,3}(?:\.\d{1,3}){3})\s+\d+\s+typ\s+(\w+)/);
+    if (m) return { ip: m[1], typ: m[2] };
+    const m6 = s.match(/\s([0-9a-fA-F:]+)\s+\d+\s+typ\s+(\w+)/);
+    if (m6 && m6[1].includes(':')) return { ip: m6[1], typ: m6[2] };
+    return null;
   }
 
   function sendSignal(payload) {
@@ -229,31 +256,46 @@
 
   async function ensurePc() {
     if (pc) return pc;
-    pc = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 8 });
+    pc = new RTCPeerConnection({
+      iceServers,
+      iceTransportPolicy: iceTransportPolicy,
+      iceCandidatePoolSize: 8,
+    });
     pc.onicecandidate = (ev) => {
-      if (ev.candidate) sendSignal({ kind: 'ice', candidate: ev.candidate });
+      if (!ev.candidate) return;
+      const parsed = ipFromCandidate(ev.candidate);
+      // With relay policy, local candidates should be typ relay only.
+      if (parsed && parsed.typ !== 'relay') {
+        postNative({ type: 'ice-leak', side: 'local', ip: parsed.ip, typ: parsed.typ });
+        // Still do not send host/srflx when policy is relay (browser shouldn't emit them).
+        if (iceTransportPolicy === 'relay') return;
+      }
+      sendSignal({ kind: 'ice', candidate: ev.candidate });
     };
     pc.ontrack = (ev) => {
       remoteVideo.srcObject = ev.streams[0] || new MediaStream([ev.track]);
       try { remoteVideo.play(); } catch (_) {}
       if (video) avatar.classList.remove('show');
-      setStatus('Conectado');
+      setStatus(iceTransportPolicy === 'relay' ? 'Conectado · relé' : 'Conectado');
       iceRestartCount = 0;
-      postNative({ type: 'connected' });
+      postNative({ type: 'connected', policy: iceTransportPolicy });
+      void logSelectedPair();
     };
     pc.oniceconnectionstatechange = () => {
       const s = pc && pc.iceConnectionState;
       if (s === 'connected' || s === 'completed') {
-        setStatus('Conectado');
+        setStatus(iceTransportPolicy === 'relay' ? 'Conectado · relé' : 'Conectado');
         iceRestartCount = 0;
+        void logSelectedPair();
       } else if (s === 'checking') {
         setStatus('Negociando red…');
       } else if (s === 'disconnected') {
-        setStatus('Señal débil…');
+        setStatus('Relé interrumpido…');
+        postNative({ type: 'relay-drop', state: 'disconnected' });
         setTimeout(() => {
           if (pc && pc.iceConnectionState === 'disconnected' && iceRestartCount < 3) {
             iceRestartCount += 1;
-            setStatus('Reconectando ICE…');
+            setStatus('Reconectando relé…');
             try {
               pc.restartIce();
               if (role === 'caller') {
@@ -266,7 +308,7 @@
       } else if (s === 'failed') {
         if (iceRestartCount < 4) {
           iceRestartCount += 1;
-          setStatus('Reintentando ICE (' + iceRestartCount + ')…');
+          setStatus('Reintentando relé (' + iceRestartCount + ')…');
           try {
             pc.restartIce();
             if (role === 'caller') {
@@ -274,11 +316,11 @@
               void makeOffer(true);
             }
           } catch (_) {
-            setStatus('No se pudo conectar. Cuelga y reintenta.');
+            setStatus('Relé caído. La llamada se cortó.');
             postNative({ type: 'error', message: 'ice-failed' });
           }
         } else {
-          setStatus('No se pudo conectar. Cuelga y reintenta.');
+          setStatus('Relé caído. La llamada se cortó.');
           postNative({ type: 'error', message: 'ice-failed' });
         }
       }
@@ -286,10 +328,11 @@
     pc.onconnectionstatechange = () => {
       const s = pc && pc.connectionState;
       if (s === 'connected') {
-        setStatus('Conectado');
-        postNative({ type: 'connected' });
+        setStatus(iceTransportPolicy === 'relay' ? 'Conectado · relé' : 'Conectado');
+        postNative({ type: 'connected', policy: iceTransportPolicy });
+        void logSelectedPair();
       } else if (s === 'connecting') {
-        setStatus('Conectando audio/video…');
+        setStatus('Conectando audio…');
       } else if (s === 'failed') {
         setStatus('Enlace falló. Reintentando…');
       }
@@ -297,6 +340,46 @@
     const stream = await ensureMedia();
     stream.getTracks().forEach((t) => pc.addTrack(t, stream));
     return pc;
+  }
+
+  async function logSelectedPair() {
+    if (!pc) return;
+    try {
+      const stats = await pc.getStats();
+      let selected = null;
+      stats.forEach((r) => {
+        if (r.type === 'candidate-pair' && (r.selected || r.nominated) && r.state === 'succeeded') {
+          selected = r;
+        }
+      });
+      if (!selected) {
+        stats.forEach((r) => {
+          if (r.type === 'candidate-pair' && r.state === 'succeeded') selected = r;
+        });
+      }
+      if (!selected) return;
+      const local = stats.get(selected.localCandidateId);
+      const remote = stats.get(selected.remoteCandidateId);
+      const info = {
+        type: 'ice-pair',
+        policy: iceTransportPolicy,
+        local: local
+          ? { ip: local.address || local.ip, typ: local.candidateType, port: local.port }
+          : null,
+        remote: remote
+          ? { ip: remote.address || remote.ip, typ: remote.candidateType, port: remote.port }
+          : null,
+      };
+      if (info.remote && info.remote.ip) {
+        seenRemoteIps.push(info.remote);
+      }
+      postNative(info);
+      setStatus(
+        (iceTransportPolicy === 'relay' ? 'Conectado · relé' : 'Conectado') +
+          '\nremoto: ' +
+          (info.remote ? info.remote.typ + ' ' + info.remote.ip : '?'),
+      );
+    } catch (_) {}
   }
 
   /** DTLS-SRTP is mandatory: refuse to signal SDP without fingerprint. */
@@ -357,6 +440,11 @@
       return;
     }
     if (signal.kind === 'ice' && signal.candidate) {
+      const parsed = ipFromCandidate(signal.candidate);
+      if (parsed) {
+        seenRemoteIps.push(parsed);
+        postNative({ type: 'ice-remote', ip: parsed.ip, typ: parsed.typ });
+      }
       if (!conn.remoteDescription) {
         pendingIce.push(signal.candidate);
         return;

@@ -376,6 +376,25 @@ export function CallScreen(): JSX.Element {
                 if (data.type === 'connected' || data.type === 'media-ok') {
                   setWebLoading(false);
                 }
+                if (data.type === 'ice-config') {
+                  setStatusHint(
+                    `ICE ${data.policy || 'relay'} · ${data.provider || 'turn'}`,
+                  );
+                }
+                if (data.type === 'ice-pair' && data.remote) {
+                  const r = data.remote as { typ?: string; ip?: string };
+                  setStatusHint(
+                    `Par ICE remoto: ${r.typ || '?'} ${r.ip || '?'}\n(relé = IP del TURN, no del teléfono)`,
+                  );
+                  setWebLoading(false);
+                }
+                if (data.type === 'ice-leak') {
+                  setStatusHint(
+                    `AVISO: candidato local ${String(
+                      (data as { typ?: string }).typ,
+                    )} — no debería enviarse en modo relay`,
+                  );
+                }
                 if (data.type === 'camera-blocked') {
                   setStatusHint('Llamada de voz · cámara bloqueada');
                 }

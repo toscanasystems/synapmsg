@@ -26,6 +26,7 @@ import {
 } from './messages/expireScheduler';
 import { startDmsScheduler, stopDmsScheduler } from './security/dmsScheduler';
 import { getCallConfig } from './calls/config';
+import { mintTurnIceServers } from './calls/turnCredentials';
 import callsRouter from './calls/routes';
 import pollsRouter from './polls/routes';
 import { authMiddleware } from './middleware/auth';
@@ -110,10 +111,19 @@ app.use('/security', (req, res, next) => {
 });
 app.use('/security', express.static(path.join(__dirname, '..', 'public', 'security')));
 
-// Call media: Jitsi SFU (default) or P2P WebRTC fallback. Signaling stays on Synap WS.
-// Public: engine + STUN only. Authenticated: includes TURN credentials when configured.
+// Call media: P2P WebRTC (DTLS-SRTP). Signaling on Synap WS.
+// Public: STUN only. Authenticated: short-lived TURN + iceTransportPolicy.
+// Default policy=relay so peer public IPs are not exchanged (strangers).
 app.get('/call/config', (req: Request, res: Response, next: NextFunction) => {
+  const base = getCallConfig();
   const auth = req.headers.authorization;
+  const wantDirect =
+    String(req.query.allowDirect || '') === '1' ||
+    String(req.query.allowDirect || '').toLowerCase() === 'true';
+  // Trusted-direct only when explicitly enabled on the server (mutual trust UI later).
+  const allowDirect =
+    wantDirect && process.env.SYNAP_CALL_ALLOW_DIRECT === '1';
+
   if (auth?.startsWith('Bearer ')) {
     void authMiddleware(req, res, (err?: unknown) => {
       if (err) {
@@ -121,14 +131,28 @@ app.get('/call/config', (req: Request, res: Response, next: NextFunction) => {
         return;
       }
       if (!req.user) {
-        res.json(getCallConfig({ includeTurnCredentials: false }));
+        res.json({ ...base, provider: 'none' });
         return;
       }
-      res.json(getCallConfig({ includeTurnCredentials: true }));
+      void mintTurnIceServers({ allowDirect })
+        .then((mint) => {
+          res.json({
+            ...base,
+            iceServers: mint.iceServers,
+            iceTransportPolicy: mint.iceTransportPolicy,
+            provider: mint.provider,
+            ttlSec: mint.ttlSec,
+            note:
+              mint.iceTransportPolicy === 'relay'
+                ? 'TURN relay (encrypted). Peer IP hidden. Server cannot decrypt SRTP.'
+                : 'Direct ICE allowed (trusted). Prefer relay for strangers.',
+          });
+        })
+        .catch((e) => next(e));
     });
     return;
   }
-  res.json(getCallConfig({ includeTurnCredentials: false }));
+  res.json({ ...base, provider: 'none' });
 });
 
 app.get('/call', (req: Request, res: Response) => {

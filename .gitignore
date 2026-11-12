@@ -84,3 +84,7 @@ apps/mobile/android/app/debug.keystore
 **/*credentials*.json
 *.pem
 *.p12
+
+apps/turn/.turn_secret.local
+apps/api/_turn_*.json
+
