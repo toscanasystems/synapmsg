@@ -36,7 +36,11 @@ import {
   hasUserTrustedPeer,
   promptIdentityTrust,
 } from '../crypto/identityTrust';
-import { getLocalSignalDeviceId } from '../crypto/signalSession';
+import {
+  awaitSignalStoreReady,
+  getLocalSignalDeviceId,
+  isSignalStoreLoaded,
+} from '../crypto/signalSession';
 import { applyPrivateOnDeviceMt } from '../i18n/privateOnDeviceMt';
 
 interface ChatsState {
@@ -113,6 +117,14 @@ function peerLabelForChat(chat: Chat | undefined, meId: string): string {
   );
 }
 
+function hasUsablePlaintext(m: Message | undefined): boolean {
+  return Boolean(
+    m?.originalText &&
+      m.originalText.length > 0 &&
+      !m.originalText.startsWith('🔒'),
+  );
+}
+
 async function maybeDecryptMessage(
   message: Message,
   peerUserId: string | null,
@@ -120,6 +132,9 @@ async function maybeDecryptMessage(
 ): Promise<Message> {
   let next = message;
   if (message.isE2e && message.ciphertext && peerUserId) {
+    // Hold ciphertext until the Signal store is on disk → memory.
+    // Do not discard; decrypt after hydrate.
+    await awaitSignalStoreReady();
     const { mayDecryptE2e } = await import('../security/deviceGuard');
     const gate = mayDecryptE2e();
     if (!gate.ok) {
@@ -151,6 +166,8 @@ async function maybeDecryptMessage(
             message.id,
             'peer',
             peerUserId,
+            'storeLoaded=',
+            isSignalStoreLoaded(),
           );
           next = {
             ...message,
@@ -190,6 +207,13 @@ async function maybeDecryptMessage(
           !message.originalText ||
           message.originalText.startsWith('🔒')
         ) {
+          console.warn(
+            '[signal] decrypt threw for message',
+            message.id,
+            'storeLoaded=',
+            isSignalStoreLoaded(),
+            err instanceof Error ? err.message : err,
+          );
           next = {
             ...message,
             originalText: '🔒 No se pudo descifrar (sesión Signal)',
@@ -228,6 +252,16 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
   setActiveChatId: (chatId) => set({ activeChatId: chatId }),
 
   catchUpAfterReconnect: async () => {
+    // Store first, then REST catch-up, then decrypt — never decrypt mid-hydrate.
+    try {
+      await awaitSignalStoreReady();
+    } catch (err) {
+      console.warn(
+        '[signal] catch-up deferred: store not ready',
+        err instanceof Error ? err.message : err,
+      );
+      return;
+    }
     const { activeChatId, messagesByChat, fetchChats, fetchMessages } = get();
     const ids = new Set<string>(Object.keys(messagesByChat));
     if (activeChatId) ids.add(activeChatId);
@@ -264,17 +298,55 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
 
   fetchMessages: async (chatId) => {
     try {
+      await awaitSignalStoreReady();
       const { messages } = await messagesApi.list(chatId, 1, 100);
       const me = useAuthStore.getState().user;
-      const chat = get().chats.find((c) => c.id === chatId);
-      const peerId = me ? peerIdForChat(chat, me.id) : null;
-      const decrypted = await Promise.all(
-        messages.map(async (m) => {
-          // Own messages: keep server placeholder / local cache; decrypt others via sender.
-          const fromPeer = m.senderId === me?.id ? null : m.senderId;
-          return maybeDecryptMessage(m, fromPeer, chatId);
-        }),
-      );
+      const existing = get().messagesByChat[chatId] ?? [];
+      const byId = new Map(existing.map((m) => [m.id, m]));
+      // Signal envelopes are single-use. Never SessionCipher-open an id we
+      // already have locally (plaintext or prior lock) — catch-up would burn
+      // the live ratchet. Only decrypt brand-new ids from the server list.
+      const decrypted: Message[] = [];
+      for (const m of messages) {
+        const local = byId.get(m.id);
+        if (local && local.ciphertext === m.ciphertext) {
+          if (hasUsablePlaintext(local)) {
+            decrypted.push({
+              ...m,
+              originalText: local.originalText,
+              translatedText: local.translatedText || local.originalText,
+              isTranslated: local.isTranslated,
+            });
+          } else {
+            decrypted.push({
+              ...m,
+              originalText: local.originalText || '🔒 Mensaje cifrado',
+              translatedText:
+                local.translatedText || local.originalText || '🔒 Mensaje cifrado',
+              isTranslated: false,
+            });
+          }
+          continue;
+        }
+        const fromPeer = m.senderId === me?.id ? null : m.senderId;
+        if (fromPeer == null) {
+          decrypted.push({
+            ...m,
+            originalText:
+              (local && hasUsablePlaintext(local) && local.originalText) ||
+              (m.originalText && !m.originalText.startsWith('🔒')
+                ? m.originalText
+                : '🔒 Mensaje cifrado'),
+            translatedText:
+              (local && hasUsablePlaintext(local) &&
+                (local.translatedText || local.originalText)) ||
+              '🔒 Mensaje cifrado',
+            isTranslated: false,
+          });
+          continue;
+        }
+        decrypted.push(await maybeDecryptMessage(m, fromPeer, chatId));
+      }
       set((state) => ({
         messagesByChat: {
           ...state.messagesByChat,

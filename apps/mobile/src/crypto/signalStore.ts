@@ -1,7 +1,8 @@
 /**
  * On-device Signal Protocol store.
  * Private key material (identity, prekeys) → OS SecureStore / Keystore.
- * Session records stay in app documents (survive kill; not uploaded).
+ * Session records use the same securePut path (SecureStore) with file fallback
+ * when the record exceeds SecureStore size limits — never RAM-only.
  */
 
 import * as FileSystem from 'expo-file-system';
@@ -18,6 +19,22 @@ import {
 } from '../security/secureVault';
 
 const ROOT = `${FileSystem.documentDirectory ?? ''}synap_signal_v2/`;
+
+/** One store instance per deviceId — sessions must share disk + memory cache. */
+const storeByDevice = new Map<string, SecureSignalStore>();
+
+export function getSecureSignalStore(deviceId: string): SecureSignalStore {
+  let s = storeByDevice.get(deviceId);
+  if (!s) {
+    s = new SecureSignalStore(deviceId);
+    storeByDevice.set(deviceId, s);
+  }
+  return s;
+}
+
+export function dropSecureSignalStore(deviceId: string): void {
+  storeByDevice.delete(deviceId);
+}
 
 function b64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
@@ -64,9 +81,96 @@ export class SecureSignalStore implements StorageType {
    */
   private identityCache = new Map<string, string>();
   private identitiesLoaded: Promise<void> | null = null;
+  /** Write-through session cache — always mirrored to SecureStore/file. */
+  private sessionCache = new Map<string, SessionRecordType>();
+  private hydratePromise: Promise<void> | null = null;
+  private hydrated = false;
 
   constructor(private readonly deviceId: string) {
     this.ready = ensureDir(this.base());
+  }
+
+  /** True after identities + sessions have been read from disk/SecureStore. */
+  isStoreLoaded(): boolean {
+    return this.hydrated;
+  }
+
+  /**
+   * Load identities and all sess_* records into memory before any decrypt.
+   * Safe to call repeatedly; subsequent calls await the same promise.
+   */
+  async hydrate(): Promise<void> {
+    if (this.hydrated) return;
+    if (this.hydratePromise) return this.hydratePromise;
+    this.hydratePromise = (async () => {
+      await this.rw();
+      await this.ensureIdentitiesLoaded();
+      try {
+        const names = await FileSystem.readDirectoryAsync(this.base());
+        for (const name of names) {
+          if (!name.startsWith('sess_') || !name.endsWith('.sess')) continue;
+          const encoded = name.slice('sess_'.length, -'.sess'.length);
+          const raw = await this.readSessionRecord(encoded);
+          if (raw) this.sessionCache.set(encoded, raw);
+        }
+      } catch {
+        /* empty store */
+      }
+      // Also pull any sessions that live only in SecureStore (no file yet).
+      // Indexed via sess_index.txt when present.
+      const indexRaw = await this.read('sess_index.txt');
+      if (indexRaw) {
+        try {
+          const ids = JSON.parse(indexRaw) as string[];
+          for (const encoded of ids) {
+            if (this.sessionCache.has(encoded)) continue;
+            const raw = await this.readSessionRecord(encoded);
+            if (raw) this.sessionCache.set(encoded, raw);
+          }
+        } catch {
+          /* ignore bad index */
+        }
+      }
+      this.hydrated = true;
+      console.log(
+        '[signalStore] hydrated',
+        'identities=',
+        this.identityCache.size,
+        'sessions=',
+        this.sessionCache.size,
+      );
+    })();
+    try {
+      await this.hydratePromise;
+    } catch (err) {
+      this.hydratePromise = null;
+      throw err;
+    }
+  }
+
+  private async trackSessionId(encodedAddress: string): Promise<void> {
+    const key = safeName(encodedAddress);
+    const raw = await this.read('sess_index.txt');
+    let ids: string[] = [];
+    if (raw) {
+      try {
+        ids = JSON.parse(raw) as string[];
+      } catch {
+        ids = [];
+      }
+    }
+    if (!ids.includes(key)) {
+      ids.push(key);
+      await this.write('sess_index.txt', JSON.stringify(ids));
+    }
+  }
+
+  private async readSessionRecord(
+    encodedAddress: string,
+  ): Promise<SessionRecordType | undefined> {
+    const key = safeName(encodedAddress);
+    const raw = await this.readSecret(`sess_${key}`, `sess_${key}.sess`);
+    return raw ?? undefined;
   }
 
   private base(): string {
@@ -217,7 +321,10 @@ export class SecureSignalStore implements StorageType {
   }
 
   async removeSession(encodedAddress: string): Promise<void> {
-    await this.del(`sess_${safeName(encodedAddress)}.sess`);
+    const key = safeName(encodedAddress);
+    this.sessionCache.delete(key);
+    await secureDel(this.sk(`sess_${key}`));
+    await this.del(`sess_${key}.sess`);
   }
 
   async loadPreKey(keyId: string | number): Promise<KeyPairType | undefined> {
@@ -256,14 +363,21 @@ export class SecureSignalStore implements StorageType {
     encodedAddress: string,
     record: SessionRecordType,
   ): Promise<void> {
-    await this.write(`sess_${safeName(encodedAddress)}.sess`, record);
+    const key = safeName(encodedAddress);
+    this.sessionCache.set(key, record);
+    await this.writeSecret(`sess_${key}`, record, `sess_${key}.sess`);
+    await this.trackSessionId(key);
   }
 
   async loadSession(
     encodedAddress: string,
   ): Promise<SessionRecordType | undefined> {
-    const raw = await this.read(`sess_${safeName(encodedAddress)}.sess`);
-    return raw ?? undefined;
+    const key = safeName(encodedAddress);
+    const cached = this.sessionCache.get(key);
+    if (cached != null) return cached;
+    const raw = await this.readSessionRecord(key);
+    if (raw != null) this.sessionCache.set(key, raw);
+    return raw;
   }
 
   async loadSignedPreKey(
@@ -319,12 +433,19 @@ export class SecureSignalStore implements StorageType {
       await secureDel(this.sk(`pk_${i}`));
       await secureDel(this.sk(`spk_${i}`));
     }
+    for (const key of this.sessionCache.keys()) {
+      await secureDel(this.sk(`sess_${key}`));
+    }
     const info = await FileSystem.getInfoAsync(this.base());
     if (info.exists) {
       await FileSystem.deleteAsync(this.base(), { idempotent: true });
     }
     this.identityCache.clear();
     this.identitiesLoaded = null;
+    this.sessionCache.clear();
+    this.hydrated = false;
+    this.hydratePromise = null;
     this.ready = ensureDir(this.base());
+    dropSecureSignalStore(this.deviceId);
   }
 }

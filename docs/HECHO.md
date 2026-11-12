@@ -7,23 +7,15 @@ Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
 ### Demostrado
 
-API `api.synapmsg.ai`, script `apps/api/scripts/proof-ws-reconnect-catchup.js` → `ok:true`.
+API `api.synapmsg.ai`, script `apps/api/scripts/proof-ws-reconnect-catchup.js` → `ok:true` (dos clientes WS en PC).
 
-**Importante:** la prueba se hizo con **dos clientes WebSocket en la computadora** (Node/`ws`), no con dos teléfonos físicos. Las cuentas usadas fueron Toscana `4729679274` y Samsung `7751806459` (solo identidad en el servidor).
+**Reconexión y recuperación probadas entre dos teléfonos reales** — APK **versionCode 78** (`1.1.8`), Toscana SM-A356E `RFCX41A9NQL` ↔ Samsung SM-A566E `R5CYA03YERH`, chat Privado abierto en ambos; script `apps/mobile/_send_and_prove_73.js` → `allThreeReadable: true` (~12:49–12:50 UTC-6):
 
-1. Dos clientes WS en la PC conectados; `railway restart -y`.
-2. Ambos vuelven a conectar solos con backoff 1→2→4→8 s.
-3. Mensaje enviado en el reinicio; al volver, el receptor lo obtiene por REST (`fetchMessages` / lista) — `bSawViaRest: true`.
-4. Código en la app (aún sin prueba en dos APK): `WebSocketManager` con ese backoff; `catchUpAfterReconnect` + `activeChatId` en ChatScreen.
+1. Antes del reinicio: `probe73_366561` leído en claro en Samsung.
+2. `railway restart -y`; durante el rebote Toscana envió `f73ph_09390482`; tras reconectar, Samsung lo mostró en claro (no candado).
+3. Después del reinicio: `f73post_09449053` también en claro en Samsung.
 
-### Todavía no
-
-- **Dos teléfonos físicos leyendo el texto tras reinicio.** Intento 2026-11-12 ~12:08–12:10 UTC-6 con APK **versionCode 77** en Toscana `RFCX41A9NQL` y Samsung `R5CYA03YERH`, ambos abiertos en el mismo chat Privado:
-  1. Antes del reinicio, Toscana envió `probe73_929475` y Samsung lo mostró en claro (`sameChat: true`).
-  2. `railway restart -y`; Toscana envió `f73ph_06945414` durante el rebote.
-  3. Tras volver, Samsung mostró burbujas nuevas (12:08 / 12:09) pero como «No se pudo descifrar (sesión Signal)» — el marco llegó (no saltó del todo), el texto no se leyó.
-  4. Por eso **no** se marca «Reconexión y recuperación probadas entre dos teléfonos reales.»
-- Sesiones Signal estables en ambos aparatos tras reinstalar APK (el fallo de descifrado bloqueó la lectura).
+Arreglo móvil (sin cambios de servidor): sesión Signal en almacén persistente (SecureStore + fallback archivo) con hydrate antes de descifrar; catch-up no reabre sobres ya vistos (el ratchet es de un solo uso); mutex por peer; log `storeLoaded=` si falla un descifrado.
 
 ## 2026-11-12 — Fase 7.2 Límite de intentos (login / registro)
 

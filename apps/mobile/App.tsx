@@ -378,12 +378,10 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     if (token) {
-      // Force WS onto direct API (calls break if stuck on tunnel Worker).
-      wsManager.reconnect(token);
       void fetchChats();
       void registerPushToken();
       void hydrateGlossary(true);
-      // Auto-register Signal (libsignal) public bundle — private keys stay on device.
+      // Store first, then WS — decrypt on reconnect must not race hydrate.
       void (async () => {
         try {
           const bundle = await ensureSignalBundle();
@@ -400,6 +398,9 @@ export default function App(): JSX.Element {
           await publishKtlIfNeeded();
         } catch {
           /* non-fatal — user can retry from Settings → Dispositivo E2E */
+        } finally {
+          // Force WS onto direct API (calls break if stuck on tunnel Worker).
+          wsManager.reconnect(token);
         }
       })();
     }

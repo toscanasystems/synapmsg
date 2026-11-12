@@ -19,7 +19,11 @@ import { Platform } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import { apiClient } from '../api/client';
 import { mayDecryptE2e } from '../security/deviceGuard';
-import { SecureSignalStore } from './signalStore';
+import {
+  dropSecureSignalStore,
+  getSecureSignalStore,
+  SecureSignalStore,
+} from './signalStore';
 import * as FileSystem from 'expo-file-system';
 import { bytesToUtf8, utf8ToArrayBuffer } from './utf8Bytes';
 import { IdentityKeyChangedError } from './identityTrust';
@@ -32,6 +36,66 @@ async function writeLastDecryptError(line: string): Promise<void> {
   } catch {
     /* ignore */
   }
+}
+
+let storeReadyPromise: Promise<void> | null = null;
+let storeReadyDeviceId: string | null = null;
+
+/** Await until Signal identity + sessions are loaded from SecureStore/disk. */
+export async function awaitSignalStoreReady(): Promise<void> {
+  const deviceId = await ensureDeviceId();
+  if (storeReadyPromise && storeReadyDeviceId === deviceId) {
+    return storeReadyPromise;
+  }
+  storeReadyDeviceId = deviceId;
+  storeReadyPromise = (async () => {
+    const store = getSecureSignalStore(deviceId);
+    await store.hydrate();
+  })();
+  try {
+    await storeReadyPromise;
+  } catch (err) {
+    storeReadyPromise = null;
+    throw err;
+  }
+}
+
+export function isSignalStoreLoaded(): boolean {
+  if (!storeReadyDeviceId) return false;
+  try {
+    return getSecureSignalStore(storeReadyDeviceId).isStoreLoaded();
+  } catch {
+    return false;
+  }
+}
+
+/** Serialize encrypt/decrypt per peer — concurrent SessionCipher races corrupt sessions. */
+const peerCryptoLocks = new Map<string, Promise<unknown>>();
+
+async function withPeerCryptoLock<T>(
+  peerUserId: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const prev = peerCryptoLocks.get(peerUserId) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>((r) => {
+    release = r;
+  });
+  const chained = prev.then(() => gate);
+  peerCryptoLocks.set(peerUserId, chained);
+  await prev.catch(() => undefined);
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (peerCryptoLocks.get(peerUserId) === chained) {
+      peerCryptoLocks.delete(peerUserId);
+    }
+  }
+}
+
+function storeLoadedFlag(): boolean {
+  return isSignalStoreLoaded();
 }
 
 try {
@@ -141,7 +205,8 @@ export async function ensureSignalBundle(): Promise<SignalPublicBundle> {
   if (ensureSignalBundleInflight) return ensureSignalBundleInflight;
   ensureSignalBundleInflight = (async () => {
     const deviceId = await ensureDeviceId();
-    const store = new SecureSignalStore(deviceId);
+    await awaitSignalStoreReady();
+    const store = getSecureSignalStore(deviceId);
     let identity = await store.getIdentityKeyPair();
     let registrationId = await store.getLocalRegistrationId();
     let meta = await loadMeta(store);
@@ -230,7 +295,8 @@ export async function ensureSignalBundle(): Promise<SignalPublicBundle> {
 export async function getSignalIdentityPub(): Promise<string | null> {
   const deviceId = await SecureStore.getItemAsync(DEVICE_ID_KEY);
   if (!deviceId) return null;
-  const store = new SecureSignalStore(deviceId);
+  await awaitSignalStoreReady();
+  const store = getSecureSignalStore(deviceId);
   const meta = await loadMeta(store);
   return meta?.identityKeyPub ?? null;
 }
@@ -242,16 +308,20 @@ export async function getSignalDeviceId(): Promise<string | null> {
 export async function wipeSignalLocalSecrets(): Promise<void> {
   const deviceId = await SecureStore.getItemAsync(DEVICE_ID_KEY);
   if (deviceId) {
-    const store = new SecureSignalStore(deviceId);
+    const store = getSecureSignalStore(deviceId);
     await store.wipeAll();
+    dropSecureSignalStore(deviceId);
   }
+  storeReadyPromise = null;
+  storeReadyDeviceId = null;
   await SecureStore.deleteItemAsync(DEVICE_ID_KEY).catch(() => undefined);
 }
 
 export async function getSignalIdentityPrivB64ForProve(): Promise<string | null> {
   const deviceId = await SecureStore.getItemAsync(DEVICE_ID_KEY);
   if (!deviceId) return null;
-  const store = new SecureSignalStore(deviceId);
+  await awaitSignalStoreReady();
+  const store = getSecureSignalStore(deviceId);
   const kp = await store.getIdentityKeyPair();
   if (!kp) return null;
   return b64(kp.privKey);
@@ -330,8 +400,8 @@ function bundleToDevice(bundle: PeerBundleApi): {
 export async function ensurePeerSession(peerUserId: string): Promise<void> {
   await ensureSignalBundle();
   const deviceId = await ensureDeviceId();
-  const store = new SecureSignalStore(deviceId);
-  await store.ensureIdentitiesLoaded();
+  await awaitSignalStoreReady();
+  const store = getSecureSignalStore(deviceId);
 
   const bundle = await fetchPeerBundle(peerUserId, false);
   await store.savePeerBundle(peerUserId, JSON.stringify(bundle));
@@ -396,45 +466,47 @@ export async function signalEncryptForPeer(
   peerUserId: string,
   plaintext: string,
 ): Promise<{ ciphertext: string; ciphertextType: number }> {
-  const deviceId = await ensureDeviceId();
-  const store = new SecureSignalStore(deviceId);
-  await store.ensureIdentitiesLoaded();
-  const meta = await loadMeta(store);
-  if (!meta) throw new Error('Signal identity missing — register device');
-  if (!(await store.getIdentityKeyPair())) {
-    throw new Error('Signal private identity missing on device');
-  }
-
-  try {
-    await ensureSendSession(store, peerUserId);
-
-    const cipher = new SessionCipher(store, addr(peerUserId, 1));
-    const encrypted: MessageType = await cipher.encrypt(toUtf8Buf(plaintext));
-    if (typeof encrypted.body !== 'string') {
-      throw new Error('encrypt returned no body');
+  await awaitSignalStoreReady();
+  return withPeerCryptoLock(peerUserId, async () => {
+    const deviceId = await ensureDeviceId();
+    const store = getSecureSignalStore(deviceId);
+    const meta = await loadMeta(store);
+    if (!meta) throw new Error('Signal identity missing — register device');
+    if (!(await store.getIdentityKeyPair())) {
+      throw new Error('Signal private identity missing on device');
     }
-    const wire = {
-      v: 2,
-      protocol: SIGNAL_PROTOCOL,
-      type: encrypted.type ?? 1,
-      body: binToB64(encrypted.body),
-    };
-    return {
-      ciphertext: b64(toUtf8Buf(JSON.stringify(wire))),
-      ciphertextType: SIGNAL_CIPHERTEXT_TYPE,
-    };
-  } catch (err) {
-    if (err instanceof IdentityKeyChangedError) throw err;
-    if (
-      err instanceof Error &&
-      (err.message.includes('Identity key changed') ||
-        err.message.includes('Unknown identity key'))
-    ) {
-      const bundle = await fetchPeerBundle(peerUserId, false);
-      throw new IdentityKeyChangedError(peerUserId, bundle.identityKey);
+
+    try {
+      await ensureSendSession(store, peerUserId);
+
+      const cipher = new SessionCipher(store, addr(peerUserId, 1));
+      const encrypted: MessageType = await cipher.encrypt(toUtf8Buf(plaintext));
+      if (typeof encrypted.body !== 'string') {
+        throw new Error('encrypt returned no body');
+      }
+      const wire = {
+        v: 2,
+        protocol: SIGNAL_PROTOCOL,
+        type: encrypted.type ?? 1,
+        body: binToB64(encrypted.body),
+      };
+      return {
+        ciphertext: b64(toUtf8Buf(JSON.stringify(wire))),
+        ciphertextType: SIGNAL_CIPHERTEXT_TYPE,
+      };
+    } catch (err) {
+      if (err instanceof IdentityKeyChangedError) throw err;
+      if (
+        err instanceof Error &&
+        (err.message.includes('Identity key changed') ||
+          err.message.includes('Unknown identity key'))
+      ) {
+        const bundle = await fetchPeerBundle(peerUserId, false);
+        throw new IdentityKeyChangedError(peerUserId, bundle.identityKey);
+      }
+      throw err;
     }
-    throw err;
-  }
+  });
 }
 
 /** Local Signal device id (for trust UX / settings). */
@@ -448,140 +520,142 @@ export async function signalDecryptFromPeer(
 ): Promise<string | null> {
   const gate = mayDecryptE2e();
   if (!gate.ok) {
-    logSignal('decrypt blocked by device gate', gate.reason);
-    await writeLastDecryptError(
-      `decrypt failed at gate: ${gate.reason || 'blocked'}`,
-    );
-    return null;
-  }
-
-  const deviceId = await ensureDeviceId();
-  const store = new SecureSignalStore(deviceId);
-  await store.ensureIdentitiesLoaded();
-  store.discardDeferredPreKeyRemovals();
-
-  const identity = await store.getIdentityKeyPair();
-  const regId = await store.getLocalRegistrationId();
-  const spk = await store.loadSignedPreKey(1);
-  const otkIds = await store.listPreKeyIds();
-  if (!identity) {
-    const line = 'decrypt failed at envelope (libsignal): missing local identity';
-    logSignal(line);
-    await writeLastDecryptError(line);
-    return null;
-  }
-  if (!regId) {
-    const line =
-      'decrypt failed at envelope (libsignal): missing local registrationId';
-    logSignal(line);
-    await writeLastDecryptError(line);
-    return null;
-  }
-  if (!spk) {
-    const line =
-      'decrypt failed at envelope (libsignal): missing local signed prekey (id=1)';
+    const line = `decrypt failed at gate: ${gate.reason || 'blocked'} storeLoaded=${storeLoadedFlag()}`;
     logSignal(line);
     await writeLastDecryptError(line);
     return null;
   }
 
-  let wire: { v: number; protocol: string; type: number; body: string };
-  try {
-    const json = bytesToUtf8(unb64(envelopeB64));
-    wire = JSON.parse(json) as typeof wire;
-  } catch (err) {
-    const cause = err instanceof Error ? err.message : String(err);
-    const line = `decrypt failed at utf8 conversion (envelope parse): ${cause}`;
-    logSignal(line);
-    await writeLastDecryptError(line);
-    return null;
-  }
+  // Never decrypt before the persistent store is hydrated.
+  await awaitSignalStoreReady();
 
-  if (wire.protocol !== SIGNAL_PROTOCOL || wire.v !== 2) {
-    const line = `decrypt failed at envelope (libsignal): bad wire protocol=${wire.protocol} v=${wire.v}`;
-    logSignal(line);
-    await writeLastDecryptError(line);
-    return null;
-  }
-
-  const peerAddr = addr(peerUserId, 1);
-  const existing = await store.loadSession(peerAddr.toString());
-  logSignal('decrypt attempt', {
-    peerUserId,
-    type: wire.type,
-    hasSession: Boolean(existing),
-    localOtkCount: otkIds.length,
-    otkIds: otkIds.slice(0, 8),
-  });
-
-  // Whisper without a local session cannot be opened — do NOT delete anything.
-  // Sender must establish again with a PreKey message. Refresh peer bundle cache only.
-  if (wire.type !== 3 && !existing) {
-    const line =
-      'decrypt failed at envelope (libsignal): no session for whisper message; session not deleted; need PreKey from peer';
-    logSignal(line, { peerUserId, localOtkCount: otkIds.length });
-    await writeLastDecryptError(line);
-    try {
-      await ensurePeerSession(peerUserId);
-    } catch (e) {
-      logSignal(
-        'peer bundle refresh after missing session failed',
-        e instanceof Error ? e.message : e,
-      );
-    }
-    return null;
-  }
-
-  let plain: ArrayBuffer;
-  try {
-    const cipher = new SessionCipher(store, peerAddr);
-    const body = b64ToBin(wire.body);
-    plain =
-      wire.type === 3
-        ? await cipher.decryptPreKeyWhisperMessage(body, 'binary')
-        : await cipher.decryptWhisperMessage(body, 'binary');
-  } catch (err) {
+  return withPeerCryptoLock(peerUserId, async () => {
+    const loaded = storeLoadedFlag();
+    const deviceId = await ensureDeviceId();
+    const store = getSecureSignalStore(deviceId);
     store.discardDeferredPreKeyRemovals();
-    const cause = err instanceof Error ? err.message : String(err);
-    if (
-      cause.includes('Identity key changed') ||
-      cause.includes('Unknown identity key')
-    ) {
-      try {
-        const bundle = await fetchPeerBundle(peerUserId, false);
-        throw new IdentityKeyChangedError(peerUserId, bundle.identityKey);
-      } catch (inner) {
-        if (inner instanceof IdentityKeyChangedError) throw inner;
-      }
+
+    const identity = await store.getIdentityKeyPair();
+    const regId = await store.getLocalRegistrationId();
+    const spk = await store.loadSignedPreKey(1);
+    if (!identity) {
+      const line = `decrypt failed at envelope (libsignal): missing local identity storeLoaded=${loaded}`;
+      logSignal(line);
+      await writeLastDecryptError(line);
+      return null;
     }
-    const stillSession = await store.loadSession(peerAddr.toString());
-    const otkNow = await store.listPreKeyIds();
-    const line = `decrypt failed at envelope (libsignal): ${cause}`;
-    logSignal(line, {
+    if (!regId) {
+      const line = `decrypt failed at envelope (libsignal): missing local registrationId storeLoaded=${loaded}`;
+      logSignal(line);
+      await writeLastDecryptError(line);
+      return null;
+    }
+    if (!spk) {
+      const line = `decrypt failed at envelope (libsignal): missing local signed prekey (id=1) storeLoaded=${loaded}`;
+      logSignal(line);
+      await writeLastDecryptError(line);
+      return null;
+    }
+
+    let wire: { v: number; protocol: string; type: number; body: string };
+    try {
+      const json = bytesToUtf8(unb64(envelopeB64));
+      wire = JSON.parse(json) as typeof wire;
+    } catch (err) {
+      const cause = err instanceof Error ? err.message : String(err);
+      const line = `decrypt failed at utf8 conversion (envelope parse): ${cause} storeLoaded=${loaded}`;
+      logSignal(line);
+      await writeLastDecryptError(line);
+      return null;
+    }
+
+    if (wire.protocol !== SIGNAL_PROTOCOL || wire.v !== 2) {
+      const line = `decrypt failed at envelope (libsignal): bad wire protocol=${wire.protocol} v=${wire.v} storeLoaded=${loaded}`;
+      logSignal(line);
+      await writeLastDecryptError(line);
+      return null;
+    }
+
+    const peerAddr = addr(peerUserId, 1);
+    const existing = await store.loadSession(peerAddr.toString());
+    logSignal('decrypt attempt', {
       peerUserId,
       type: wire.type,
-      hasSession: Boolean(stillSession),
-      localOtkCount: otkNow.length,
-      otkIds: otkNow.slice(0, 8),
-      // session intentionally kept if it existed
-      sessionPreserved: Boolean(stillSession),
+      hasSession: Boolean(existing),
+      storeLoaded: loaded,
     });
-    await writeLastDecryptError(line);
-    return null;
-  }
 
-  try {
-    const text = bytesToUtf8(plain);
-    await store.commitDeferredPreKeyRemovals();
-    return text;
-  } catch (err) {
-    store.discardDeferredPreKeyRemovals();
-    const cause = err instanceof Error ? err.message : String(err);
-    const line = `decrypt failed at utf8 conversion: ${cause}`;
-    logSignal(line, { peerUserId, plainByteLength: plain.byteLength });
-    await writeLastDecryptError(line);
-    return null;
-  }
+    // Whisper without a local session cannot be opened — do NOT delete anything.
+    // Sender must establish again with a PreKey message. Refresh peer bundle cache only.
+    if (wire.type !== 3 && !existing) {
+      const line = `decrypt failed at envelope (libsignal): no session for whisper message; session not deleted; need PreKey from peer storeLoaded=${loaded}`;
+      logSignal(line, { peerUserId, storeLoaded: loaded });
+      await writeLastDecryptError(line);
+      try {
+        await ensurePeerSession(peerUserId);
+      } catch (e) {
+        logSignal(
+          'peer bundle refresh after missing session failed',
+          e instanceof Error ? e.message : e,
+        );
+      }
+      return null;
+    }
+
+    let plain: ArrayBuffer;
+    try {
+      const cipher = new SessionCipher(store, peerAddr);
+      const body = b64ToBin(wire.body);
+      plain =
+        wire.type === 3
+          ? await cipher.decryptPreKeyWhisperMessage(body, 'binary')
+          : await cipher.decryptWhisperMessage(body, 'binary');
+    } catch (err) {
+      store.discardDeferredPreKeyRemovals();
+      const cause = err instanceof Error ? err.message : String(err);
+      if (
+        cause.includes('Identity key changed') ||
+        cause.includes('Unknown identity key')
+      ) {
+        try {
+          const bundle = await fetchPeerBundle(peerUserId, false);
+          throw new IdentityKeyChangedError(peerUserId, bundle.identityKey);
+        } catch (inner) {
+          if (inner instanceof IdentityKeyChangedError) throw inner;
+        }
+      }
+      // Keep the session: catch-up must not burn a live ratchet by retrying
+      // spent historical envelopes. Session heal is explicit (Confío / new PreKey).
+      const stillSession = await store.loadSession(peerAddr.toString());
+      const line = `decrypt failed at envelope (libsignal): ${cause} storeLoaded=${loaded}`;
+      logSignal(line, {
+        peerUserId,
+        type: wire.type,
+        hasSession: Boolean(stillSession),
+        storeLoaded: loaded,
+        sessionPreserved: Boolean(stillSession),
+      });
+      await writeLastDecryptError(line);
+      return null;
+    }
+
+    try {
+      const text = bytesToUtf8(plain);
+      await store.commitDeferredPreKeyRemovals();
+      return text;
+    } catch (err) {
+      store.discardDeferredPreKeyRemovals();
+      const cause = err instanceof Error ? err.message : String(err);
+      const line = `decrypt failed at utf8 conversion: ${cause} storeLoaded=${loaded}`;
+      logSignal(line, {
+        peerUserId,
+        plainByteLength: plain.byteLength,
+        storeLoaded: loaded,
+      });
+      await writeLastDecryptError(line);
+      return null;
+    }
+  });
 }
 
 export async function signalSafetyNumber(
