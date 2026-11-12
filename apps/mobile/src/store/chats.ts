@@ -38,10 +38,177 @@ import {
 } from '../crypto/identityTrust';
 import {
   awaitSignalStoreReady,
+  commitSignalPreKeyRemovals,
   getLocalSignalDeviceId,
   isSignalStoreLoaded,
+  peekLastDecryptError,
 } from '../crypto/signalSession';
+import {
+  isSpentSignalEnvelopeError,
+  loadCachedPlaintext,
+  saveCachedPlaintext,
+} from '../crypto/e2ePlaintextCache';
 import { applyPrivateOnDeviceMt } from '../i18n/privateOnDeviceMt';
+
+/** E2E envelopes that failed open — retry after Signal identity/OTKs are ready. */
+type PendingDecrypt = {
+  message: Message;
+  peerUserId: string;
+  chatId: string;
+  attempts: number;
+};
+const pendingDecryptById = new Map<string, PendingDecrypt>();
+/** Spent PreKey/Whisper ids — never SessionCipher-open again. */
+const spentEnvelopeIds = new Set<string>();
+/** Second path (WS vs catch-up) waits on the first decrypt for the same id. */
+const decryptInflightById = new Map<string, Promise<Message>>();
+let pendingFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+const LOCK_NO_SERVER = '🔒 No hay conexión con el servidor';
+const LOCK_NO_PEER_KEY =
+  '🔒 Este teléfono aún no tiene la llave de este contacto';
+const LOCK_ASK_RESEND =
+  '🔒 No se pudo abrir este mensaje. Pide que te lo manden de nuevo';
+
+function userFacingDecryptLock(lastErr: string): string {
+  const e = (lastErr || '').toLowerCase();
+  if (
+    e.includes('gate') ||
+    e.includes('network') ||
+    e.includes('timeout') ||
+    e.includes('failed to fetch') ||
+    e.includes('network request failed')
+  ) {
+    return LOCK_NO_SERVER;
+  }
+  if (
+    e.includes('missing local') ||
+    e.includes('store not ready') ||
+    e.includes('no session for whisper') ||
+    e.includes('need prekey') ||
+    e.includes('identity not installed') ||
+    e.includes('peer bundle')
+  ) {
+    return LOCK_NO_PEER_KEY;
+  }
+  if (isSpentSignalEnvelopeError(lastErr) || e.includes('message key not found')) {
+    return LOCK_ASK_RESEND;
+  }
+  return LOCK_ASK_RESEND;
+}
+
+function findLocalOpened(
+  chatId: string | undefined,
+  messageId: string,
+): Message | undefined {
+  if (!chatId) return undefined;
+  const list = useChatsStore.getState().messagesByChat[chatId] ?? [];
+  const hit = list.find((m) => m.id === messageId);
+  return hit && hasUsablePlaintext(hit) ? hit : undefined;
+}
+
+function schedulePendingFlush(delayMs: number): void {
+  if (pendingFlushTimer) return;
+  pendingFlushTimer = setTimeout(() => {
+    pendingFlushTimer = null;
+    void flushPendingSignalDecrypts();
+  }, delayMs);
+}
+
+function enqueuePendingDecrypt(
+  message: Message,
+  peerUserId: string,
+  chatId: string,
+  attempts = 0,
+): void {
+  if (!message.ciphertext) return;
+  const prev = pendingDecryptById.get(message.id);
+  pendingDecryptById.set(message.id, {
+    message: { ...message },
+    peerUserId,
+    chatId,
+    attempts: Math.max(attempts, prev?.attempts ?? 0),
+  });
+  schedulePendingFlush(attempts === 0 ? 600 : 1200);
+}
+
+/** Re-attempt queued Private envelopes once the Signal store + identity are ready. */
+export async function flushPendingSignalDecrypts(): Promise<void> {
+  if (pendingDecryptById.size === 0) return;
+  try {
+    await awaitSignalStoreReady();
+  } catch (err) {
+    console.warn(
+      '[signal] flush pending: store not ready',
+      err instanceof Error ? err.message : err,
+      'storeLoaded=',
+      isSignalStoreLoaded(),
+    );
+    schedulePendingFlush(1500);
+    return;
+  }
+  const batch = [...pendingDecryptById.entries()];
+  for (const [id, item] of batch) {
+    pendingDecryptById.delete(id);
+    const decoded = await maybeDecryptMessage(
+      item.message,
+      item.peerUserId,
+      item.chatId,
+      { skipEnqueue: true },
+    );
+    if (!hasUsablePlaintext(decoded)) {
+      const lastErr = peekLastDecryptError();
+      // At most one retry, and never for a spent one-time message key.
+      if (
+        !spentEnvelopeIds.has(id) &&
+        !isSpentSignalEnvelopeError(lastErr) &&
+        item.attempts < 1
+      ) {
+        enqueuePendingDecrypt(
+          item.message,
+          item.peerUserId,
+          item.chatId,
+          item.attempts + 1,
+        );
+      } else if (isSpentSignalEnvelopeError(lastErr)) {
+        spentEnvelopeIds.add(id);
+      }
+      continue;
+    }
+    if (decoded.ciphertext) {
+      void saveCachedPlaintext({
+        id: decoded.id,
+        chatId: item.chatId,
+        ciphertext: decoded.ciphertext,
+        originalText: decoded.originalText,
+        translatedText: decoded.translatedText || decoded.originalText,
+      });
+    }
+    useChatsStore.setState((state) => {
+      const list = state.messagesByChat[item.chatId] ?? [];
+      const next = list.map((m) => (m.id === id ? decoded : m));
+      const preview =
+        !decoded.originalText || decoded.originalText.startsWith('🔒')
+          ? '🔒 Mensaje cifrado'
+          : decoded.originalText;
+      const chats = state.chats.map((c) => {
+        if (c.id !== item.chatId) return c;
+        if (c.lastMessage?.id !== id) return c;
+        return {
+          ...c,
+          lastMessage: {
+            ...c.lastMessage,
+            text: preview,
+          },
+        };
+      });
+      return {
+        messagesByChat: { ...state.messagesByChat, [item.chatId]: next },
+        chats,
+      };
+    });
+  }
+}
 
 interface ChatsState {
   chats: Chat[];
@@ -129,109 +296,238 @@ async function maybeDecryptMessage(
   message: Message,
   peerUserId: string | null,
   chatId?: string,
+  opts?: { skipEnqueue?: boolean },
 ): Promise<Message> {
-  let next = message;
-  if (message.isE2e && message.ciphertext && peerUserId) {
-    // Hold ciphertext until the Signal store is on disk → memory.
-    // Do not discard; decrypt after hydrate.
-    await awaitSignalStoreReady();
+  const finish = async (next: Message): Promise<Message> => {
+    if (!next.isE2e) return next;
+    const me = useAuthStore.getState().user;
+    return applyPrivateOnDeviceMt(
+      next,
+      me?.preferredLanguage || 'es',
+      me?.id,
+    );
+  };
+
+  if (!(message.isE2e && message.ciphertext && peerUserId)) {
+    return finish(message);
+  }
+
+  const cid = chatId || message.chatId;
+
+  // 1) Already opened in this chat — never SessionCipher again.
+  const localOpened = findLocalOpened(cid, message.id);
+  if (localOpened) {
+    return finish({
+      ...message,
+      originalText: localOpened.originalText,
+      translatedText: localOpened.translatedText || localOpened.originalText,
+      isTranslated: localOpened.isTranslated,
+    });
+  }
+
+  // 2) Another path (WS / catch-up / flush) already decrypting this id — wait.
+  const inflight = decryptInflightById.get(message.id);
+  if (inflight) {
+    console.warn('[signal] decrypt dedup wait', message.id);
+    return inflight;
+  }
+
+  const work = (async (): Promise<Message> => {
+    // Re-check after winning the race to start.
+    const raced = findLocalOpened(cid, message.id);
+    if (raced) {
+      return finish({
+        ...message,
+        originalText: raced.originalText,
+        translatedText: raced.translatedText || raced.originalText,
+        isTranslated: raced.isTranslated,
+      });
+    }
+
+    const cached = await loadCachedPlaintext(message.id, message.ciphertext);
+    if (cached) {
+      return finish({
+        ...message,
+        originalText: cached.originalText,
+        translatedText: cached.translatedText,
+        isTranslated: false,
+      });
+    }
+
+    if (spentEnvelopeIds.has(message.id)) {
+      return finish({
+        ...message,
+        originalText: LOCK_ASK_RESEND,
+        translatedText: LOCK_ASK_RESEND,
+        isTranslated: false,
+      });
+    }
+
+    try {
+      await awaitSignalStoreReady();
+    } catch (err) {
+      console.warn(
+        '[signal] store not ready before decrypt',
+        message.id,
+        'storeLoaded=',
+        isSignalStoreLoaded(),
+        err instanceof Error ? err.message : err,
+      );
+      if (!opts?.skipEnqueue && cid) {
+        enqueuePendingDecrypt(message, peerUserId, cid);
+      }
+      return finish({
+        ...message,
+        originalText: LOCK_NO_PEER_KEY,
+        translatedText: LOCK_NO_PEER_KEY,
+        isTranslated: false,
+      });
+    }
+
     const { mayDecryptE2e } = await import('../security/deviceGuard');
     const gate = mayDecryptE2e();
     if (!gate.ok) {
-      next = {
+      return finish({
         ...message,
-        originalText: `🔒 No se pudo descifrar (${gate.reason || 'entorno no confiable'})`,
-        translatedText: `🔒 No se pudo descifrar (${gate.reason || 'entorno no confiable'})`,
+        originalText: LOCK_NO_SERVER,
+        translatedText: LOCK_NO_SERVER,
         isTranslated: false,
-      };
-    } else {
-      try {
-        const plain = await decryptMessageFromPeer(
-          peerUserId,
-          message.ciphertext,
-        );
-        if (plain) {
-          next = {
-            ...message,
+      });
+    }
+
+    try {
+      // Triple-check: catch-up may have finished while we awaited store ready.
+      const again = findLocalOpened(cid, message.id);
+      if (again) {
+        return finish({
+          ...message,
+          originalText: again.originalText,
+          translatedText: again.translatedText || again.originalText,
+          isTranslated: again.isTranslated,
+        });
+      }
+
+      const plain = await decryptMessageFromPeer(
+        peerUserId,
+        message.ciphertext!,
+      );
+      if (plain) {
+        const opened: Message = {
+          ...message,
+          originalText: plain,
+          translatedText: plain,
+          isTranslated: false,
+        };
+        // Persist id+plaintext together, then drop the one-time prekey.
+        if (cid && message.ciphertext) {
+          await saveCachedPlaintext({
+            id: message.id,
+            chatId: cid,
+            ciphertext: message.ciphertext,
             originalText: plain,
             translatedText: plain,
-            isTranslated: false,
-          };
-        } else if (
-          !message.originalText ||
-          message.originalText.startsWith('🔒')
-        ) {
-          console.warn(
-            '[signal] decrypt returned null for message',
-            message.id,
-            'peer',
-            peerUserId,
-            'storeLoaded=',
-            isSignalStoreLoaded(),
-          );
-          next = {
-            ...message,
-            originalText: '🔒 No se pudo descifrar (sesión Signal)',
-            translatedText: '🔒 No se pudo descifrar (sesión Signal)',
-            isTranslated: false,
-          };
+          });
         }
-      } catch (err) {
-        if (err instanceof IdentityKeyChangedError) {
-          const chat = useChatsStore
-            .getState()
-            .chats.find((c) => c.id === (chatId || message.chatId));
-          const me = useAuthStore.getState().user;
-          const label = peerLabelForChat(chat, me?.id || '');
-          if (!hasUserTrustedPeer(err.peerUserId)) {
-            void getLocalSignalDeviceId().then((deviceId) => {
-              promptIdentityTrust({
-                peerUserId: err.peerUserId,
-                peerLabel: label,
-                newIdentityKeyB64: err.newIdentityKeyB64,
-                deviceId,
-                onTrusted: () => {
-                  const cid = chatId || message.chatId;
-                  if (cid) void useChatsStore.getState().fetchMessages(cid);
-                },
-              });
-            });
-          }
-          next = {
-            ...message,
-            originalText: '🔒 La llave de seguridad cambió',
-            translatedText: '🔒 La llave de seguridad cambió',
-            isTranslated: false,
-          };
-        } else if (
-          !message.originalText ||
-          message.originalText.startsWith('🔒')
-        ) {
-          console.warn(
-            '[signal] decrypt threw for message',
-            message.id,
-            'storeLoaded=',
-            isSignalStoreLoaded(),
-            err instanceof Error ? err.message : err,
-          );
-          next = {
-            ...message,
-            originalText: '🔒 No se pudo descifrar (sesión Signal)',
-            translatedText: '🔒 No se pudo descifrar (sesión Signal)',
-            isTranslated: false,
-          };
+        await commitSignalPreKeyRemovals().catch(() => undefined);
+        // Put plaintext in the chat list immediately so a parallel path reuses it.
+        if (cid) {
+          useChatsStore.setState((state) => {
+            const list = state.messagesByChat[cid] ?? [];
+            const idx = list.findIndex((m) => m.id === message.id);
+            const nextList =
+              idx >= 0
+                ? list.map((m) => (m.id === message.id ? opened : m))
+                : [...list, opened];
+            return {
+              messagesByChat: { ...state.messagesByChat, [cid]: nextList },
+            };
+          });
         }
+        return finish(opened);
       }
+
+      const lastErr = peekLastDecryptError();
+      console.warn(
+        '[signal] decrypt returned null for message',
+        message.id,
+        'peer',
+        peerUserId,
+        'storeLoaded=',
+        isSignalStoreLoaded(),
+      );
+      if (isSpentSignalEnvelopeError(lastErr)) {
+        spentEnvelopeIds.add(message.id);
+        pendingDecryptById.delete(message.id);
+        console.warn(
+          '[signal] spent envelope — will not retry',
+          message.id,
+          lastErr,
+        );
+      } else if (!opts?.skipEnqueue && cid) {
+        enqueuePendingDecrypt(message, peerUserId, cid);
+      }
+      return finish({
+        ...message,
+        originalText: userFacingDecryptLock(lastErr),
+        translatedText: userFacingDecryptLock(lastErr),
+        isTranslated: false,
+      });
+    } catch (err) {
+      if (err instanceof IdentityKeyChangedError) {
+        const chat = useChatsStore.getState().chats.find((c) => c.id === cid);
+        const me = useAuthStore.getState().user;
+        const label = peerLabelForChat(chat, me?.id || '');
+        if (!hasUserTrustedPeer(err.peerUserId)) {
+          void getLocalSignalDeviceId().then((deviceId) => {
+            promptIdentityTrust({
+              peerUserId: err.peerUserId,
+              peerLabel: label,
+              newIdentityKeyB64: err.newIdentityKeyB64,
+              deviceId,
+              onTrusted: () => {
+                if (cid) void useChatsStore.getState().fetchMessages(cid);
+              },
+            });
+          });
+        }
+        return finish({
+          ...message,
+          originalText: '🔒 La llave de seguridad cambió',
+          translatedText: '🔒 La llave de seguridad cambió',
+          isTranslated: false,
+        });
+      }
+      const cause = err instanceof Error ? err.message : String(err);
+      console.warn(
+        '[signal] decrypt threw for message',
+        message.id,
+        'storeLoaded=',
+        isSignalStoreLoaded(),
+        cause,
+      );
+      if (isSpentSignalEnvelopeError(cause)) {
+        spentEnvelopeIds.add(message.id);
+        pendingDecryptById.delete(message.id);
+      } else if (!opts?.skipEnqueue && cid) {
+        enqueuePendingDecrypt(message, peerUserId, cid);
+      }
+      return finish({
+        ...message,
+        originalText: userFacingDecryptLock(cause),
+        translatedText: userFacingDecryptLock(cause),
+        isTranslated: false,
+      });
+    }
+  })();
+
+  decryptInflightById.set(message.id, work);
+  try {
+    return await work;
+  } finally {
+    if (decryptInflightById.get(message.id) === work) {
+      decryptInflightById.delete(message.id);
     }
   }
-  const me = useAuthStore.getState().user;
-  // Private only: ML Kit on-device. Cloud keeps DeepL on the server — do not run MT here.
-  if (!next.isE2e) return next;
-  return applyPrivateOnDeviceMt(
-    next,
-    me?.preferredLanguage || 'es',
-    me?.id,
-  );
 }
 
 // Optimistic messages get a synthetic id prefix so they can be reconciled
@@ -309,26 +605,18 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
       const decrypted: Message[] = [];
       for (const m of messages) {
         const local = byId.get(m.id);
-        if (local && local.ciphertext === m.ciphertext) {
-          if (hasUsablePlaintext(local)) {
-            decrypted.push({
-              ...m,
-              originalText: local.originalText,
-              translatedText: local.translatedText || local.originalText,
-              isTranslated: local.isTranslated,
-            });
-          } else {
-            decrypted.push({
-              ...m,
-              originalText: local.originalText || '🔒 Mensaje cifrado',
-              translatedText:
-                local.translatedText || local.originalText || '🔒 Mensaje cifrado',
-              isTranslated: false,
-            });
-          }
+        const fromPeer = m.senderId === me?.id ? null : m.senderId;
+        // Already opened locally — never SessionCipher-open again (ratchet is one-shot).
+        if (local && local.ciphertext === m.ciphertext && hasUsablePlaintext(local)) {
+          decrypted.push({
+            ...m,
+            originalText: local.originalText,
+            translatedText: local.translatedText || local.originalText,
+            isTranslated: local.isTranslated,
+          });
           continue;
         }
-        const fromPeer = m.senderId === me?.id ? null : m.senderId;
+        // Own sends: keep local plaintext; server has ciphertext only.
         if (fromPeer == null) {
           decrypted.push({
             ...m,
@@ -345,6 +633,9 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
           });
           continue;
         }
+        // New id OR prior lock/failure with same ciphertext: try (again) to open.
+        // Pending queue also retries; this covers identity-trust / open-chat paths
+        // that used to freeze on "🔒 No se pudo descifrar (sesión Signal)".
         decrypted.push(await maybeDecryptMessage(m, fromPeer, chatId));
       }
       set((state) => ({
@@ -559,7 +850,16 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
         : message.senderId;
 
     void (async () => {
-      const decoded = await maybeDecryptMessage(message, fromPeer, chatId);
+      // Dedup: if catch-up already opened this id, reuse plaintext — no second SessionCipher.
+      const already = findLocalOpened(chatId, message.id);
+      const decoded = already
+        ? {
+            ...message,
+            originalText: already.originalText,
+            translatedText: already.translatedText || already.originalText,
+            isTranslated: already.isTranslated,
+          }
+        : await maybeDecryptMessage(message, fromPeer, chatId);
       const isMine = me?.id === decoded.senderId;
 
       set((state) => {

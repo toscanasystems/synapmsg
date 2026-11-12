@@ -3,6 +3,20 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-12 — Primer mensaje Privado (cuentas nuevas)
+
+### Demostrado
+
+Primer mensaje entre dos cuentas nuevas: se lee en claro. Deduplicación por id
+para que el mensaje no se abra dos veces. Probado entre dos cuentas nunca vistas,
+con el log decrypt ok.
+
+APK release con dedup + caché de plaintext (`synapmsg-v79-dedup.apk` → R2
+`downloads/synap-android.apk`). Toscana SM-A356E ↔ Samsung SM-A566E; cuentas
+bootstrap nuevas `77-0732-1921` → `71-5114-6160`; UI en claro
+`virgin79_557432` / `plain79_813199`; log receptor:
+`decrypt ok … storeLoaded: true, plainLen: 14` (sin `Message key not found`).
+
 ## 2026-11-12 — Fase 7.3 Reconexión WS + mensajes perdidos
 
 ### Demostrado

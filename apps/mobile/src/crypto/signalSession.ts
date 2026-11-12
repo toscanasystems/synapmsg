@@ -30,7 +30,10 @@ import { IdentityKeyChangedError } from './identityTrust';
 
 const LAST_DECRYPT_ERR_FILE = `${FileSystem.documentDirectory ?? ''}synap_signal_last_decrypt_error.txt`;
 
+let lastDecryptErrorLine = '';
+
 async function writeLastDecryptError(line: string): Promise<void> {
+  lastDecryptErrorLine = line;
   try {
     await FileSystem.writeAsStringAsync(LAST_DECRYPT_ERR_FILE, line);
   } catch {
@@ -38,24 +41,58 @@ async function writeLastDecryptError(line: string): Promise<void> {
   }
 }
 
-let storeReadyPromise: Promise<void> | null = null;
-let storeReadyDeviceId: string | null = null;
+/** Sync peek of the most recent decrypt failure line (includes storeLoaded=). */
+export function peekLastDecryptError(): string {
+  return lastDecryptErrorLine;
+}
 
-/** Await until Signal identity + sessions are loaded from SecureStore/disk. */
-export async function awaitSignalStoreReady(): Promise<void> {
+let storeReadyDeviceId: string | null = null;
+let cryptoReadyPromise: Promise<void> | null = null;
+let hydrateOnlyPromise: Promise<void> | null = null;
+
+/** Disk/SecureStore hydrate only — does not require identity keys yet. */
+async function hydrateSignalStoreOnly(): Promise<void> {
   const deviceId = await ensureDeviceId();
-  if (storeReadyPromise && storeReadyDeviceId === deviceId) {
-    return storeReadyPromise;
+  if (hydrateOnlyPromise && storeReadyDeviceId === deviceId) {
+    return hydrateOnlyPromise;
   }
   storeReadyDeviceId = deviceId;
-  storeReadyPromise = (async () => {
+  hydrateOnlyPromise = (async () => {
     const store = getSecureSignalStore(deviceId);
     await store.hydrate();
   })();
   try {
-    await storeReadyPromise;
+    await hydrateOnlyPromise;
   } catch (err) {
-    storeReadyPromise = null;
+    hydrateOnlyPromise = null;
+    throw err;
+  }
+}
+
+/**
+ * Ready for encrypt/decrypt: store hydrated AND local identity + signed prekey
+ * installed. First-chat PreKey open needs OTKs on disk — hydrate alone is not enough.
+ */
+export async function awaitSignalStoreReady(): Promise<void> {
+  if (cryptoReadyPromise && storeReadyDeviceId) {
+    return cryptoReadyPromise;
+  }
+  cryptoReadyPromise = (async () => {
+    await hydrateSignalStoreOnly();
+    // Install identity/OTKs if missing (safe no-op when already present).
+    await ensureSignalBundle();
+    const deviceId = await ensureDeviceId();
+    const store = getSecureSignalStore(deviceId);
+    const identity = await store.getIdentityKeyPair();
+    const spk = await store.loadSignedPreKey(1);
+    if (!identity || !spk) {
+      throw new Error('Signal identity not installed after ensureSignalBundle');
+    }
+  })();
+  try {
+    await cryptoReadyPromise;
+  } catch (err) {
+    cryptoReadyPromise = null;
     throw err;
   }
 }
@@ -64,6 +101,20 @@ export function isSignalStoreLoaded(): boolean {
   if (!storeReadyDeviceId) return false;
   try {
     return getSecureSignalStore(storeReadyDeviceId).isStoreLoaded();
+  } catch {
+    return false;
+  }
+}
+
+/** True when hydrate finished AND local identity material is present. */
+export async function isSignalCryptoReady(): Promise<boolean> {
+  if (!isSignalStoreLoaded()) return false;
+  try {
+    const deviceId = await ensureDeviceId();
+    const store = getSecureSignalStore(deviceId);
+    const identity = await store.getIdentityKeyPair();
+    const spk = await store.loadSignedPreKey(1);
+    return Boolean(identity && spk);
   } catch {
     return false;
   }
@@ -205,7 +256,8 @@ export async function ensureSignalBundle(): Promise<SignalPublicBundle> {
   if (ensureSignalBundleInflight) return ensureSignalBundleInflight;
   ensureSignalBundleInflight = (async () => {
     const deviceId = await ensureDeviceId();
-    await awaitSignalStoreReady();
+    // Hydrate disk only — do NOT call awaitSignalStoreReady (would recurse).
+    await hydrateSignalStoreOnly();
     const store = getSecureSignalStore(deviceId);
     let identity = await store.getIdentityKeyPair();
     let registrationId = await store.getLocalRegistrationId();
@@ -295,7 +347,7 @@ export async function ensureSignalBundle(): Promise<SignalPublicBundle> {
 export async function getSignalIdentityPub(): Promise<string | null> {
   const deviceId = await SecureStore.getItemAsync(DEVICE_ID_KEY);
   if (!deviceId) return null;
-  await awaitSignalStoreReady();
+  await hydrateSignalStoreOnly();
   const store = getSecureSignalStore(deviceId);
   const meta = await loadMeta(store);
   return meta?.identityKeyPub ?? null;
@@ -312,15 +364,16 @@ export async function wipeSignalLocalSecrets(): Promise<void> {
     await store.wipeAll();
     dropSecureSignalStore(deviceId);
   }
-  storeReadyPromise = null;
   storeReadyDeviceId = null;
+  cryptoReadyPromise = null;
+  hydrateOnlyPromise = null;
   await SecureStore.deleteItemAsync(DEVICE_ID_KEY).catch(() => undefined);
 }
 
 export async function getSignalIdentityPrivB64ForProve(): Promise<string | null> {
   const deviceId = await SecureStore.getItemAsync(DEVICE_ID_KEY);
   if (!deviceId) return null;
-  await awaitSignalStoreReady();
+  await hydrateSignalStoreOnly();
   const store = getSecureSignalStore(deviceId);
   const kp = await store.getIdentityKeyPair();
   if (!kp) return null;
@@ -400,7 +453,7 @@ function bundleToDevice(bundle: PeerBundleApi): {
 export async function ensurePeerSession(peerUserId: string): Promise<void> {
   await ensureSignalBundle();
   const deviceId = await ensureDeviceId();
-  await awaitSignalStoreReady();
+  await hydrateSignalStoreOnly();
   const store = getSecureSignalStore(deviceId);
 
   const bundle = await fetchPeerBundle(peerUserId, false);
@@ -533,7 +586,9 @@ export async function signalDecryptFromPeer(
     const loaded = storeLoadedFlag();
     const deviceId = await ensureDeviceId();
     const store = getSecureSignalStore(deviceId);
-    store.discardDeferredPreKeyRemovals();
+    // Finish any OTK drop left pending after a prior successful open + save.
+    // Fail paths already discardDeferred — they never leave ids here to burn.
+    await store.commitDeferredPreKeyRemovals();
 
     const identity = await store.getIdentityKeyPair();
     const regId = await store.getLocalRegistrationId();
@@ -578,17 +633,20 @@ export async function signalDecryptFromPeer(
 
     const peerAddr = addr(peerUserId, 1);
     const existing = await store.loadSession(peerAddr.toString());
+    const otkCount = (await store.listPreKeyIds()).length;
     logSignal('decrypt attempt', {
       peerUserId,
       type: wire.type,
       hasSession: Boolean(existing),
       storeLoaded: loaded,
+      cryptoReady: true,
+      localOtkCount: otkCount,
     });
 
     // Whisper without a local session cannot be opened — do NOT delete anything.
     // Sender must establish again with a PreKey message. Refresh peer bundle cache only.
     if (wire.type !== 3 && !existing) {
-      const line = `decrypt failed at envelope (libsignal): no session for whisper message; session not deleted; need PreKey from peer storeLoaded=${loaded}`;
+      const line = `decrypt failed at envelope (libsignal): no session for whisper message; session not deleted; need PreKey from peer storeLoaded=${loaded} cryptoReady=true localOtkCount=${otkCount}`;
       logSignal(line, { peerUserId, storeLoaded: loaded });
       await writeLastDecryptError(line);
       try {
@@ -600,6 +658,20 @@ export async function signalDecryptFromPeer(
         );
       }
       return null;
+    }
+
+    // First PreKey from a new contact: cache their published bundle (identity +
+    // signed prekey) before opening. Does NOT processPreKey/send-session —
+    // decryptPreKeyWhisperMessage builds the inbound session from the envelope.
+    if (wire.type === 3 && !existing) {
+      try {
+        await ensurePeerSession(peerUserId);
+      } catch (e) {
+        logSignal(
+          'peer bundle prefetch before PreKey open failed (continuing)',
+          e instanceof Error ? e.message : e,
+        );
+      }
     }
 
     let plain: ArrayBuffer;
@@ -627,13 +699,14 @@ export async function signalDecryptFromPeer(
       // Keep the session: catch-up must not burn a live ratchet by retrying
       // spent historical envelopes. Session heal is explicit (Confío / new PreKey).
       const stillSession = await store.loadSession(peerAddr.toString());
-      const line = `decrypt failed at envelope (libsignal): ${cause} storeLoaded=${loaded}`;
+      const line = `decrypt failed at envelope (libsignal): ${cause} storeLoaded=${loaded} cryptoReady=true wireType=${wire.type} hasSession=${Boolean(stillSession)} localOtkCount=${otkCount}`;
       logSignal(line, {
         peerUserId,
         type: wire.type,
         hasSession: Boolean(stillSession),
         storeLoaded: loaded,
         sessionPreserved: Boolean(stillSession),
+        localOtkCount: otkCount,
       });
       await writeLastDecryptError(line);
       return null;
@@ -641,7 +714,15 @@ export async function signalDecryptFromPeer(
 
     try {
       const text = bytesToUtf8(plain);
-      await store.commitDeferredPreKeyRemovals();
+      // Do NOT commit OTK removal yet — caller must persist plaintext first,
+      // then call commitSignalPreKeyRemovals(). Fail path keeps the OTK.
+      lastDecryptErrorLine = '';
+      logSignal('decrypt ok', {
+        peerUserId,
+        wireType: wire.type,
+        storeLoaded: loaded,
+        plainLen: text.length,
+      });
       return text;
     } catch (err) {
       store.discardDeferredPreKeyRemovals();
@@ -656,6 +737,12 @@ export async function signalDecryptFromPeer(
       return null;
     }
   });
+}
+
+/** Drop OTKs deferred during the last successful PreKey open (after plaintext saved). */
+export async function commitSignalPreKeyRemovals(): Promise<void> {
+  const deviceId = await ensureDeviceId();
+  await getSecureSignalStore(deviceId).commitDeferredPreKeyRemovals();
 }
 
 export async function signalSafetyNumber(

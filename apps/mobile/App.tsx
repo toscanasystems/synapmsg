@@ -25,7 +25,11 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import colors, { themed } from './src/theme/colors';
 import { useAuthStore } from './src/store/auth';
-import { useChatsStore, registerWebSocketListener } from './src/store/chats';
+import {
+  useChatsStore,
+  registerWebSocketListener,
+  flushPendingSignalDecrypts,
+} from './src/store/chats';
 import { useChatPrefsStore } from './src/store/chatPrefs';
 import { useAppLockStore } from './src/store/appLock';
 import { useHiddenChatsStore } from './src/store/hiddenChats';
@@ -396,11 +400,14 @@ export default function App(): JSX.Element {
             protocol: bundle.protocol,
           });
           await publishKtlIfNeeded();
+          // Open any Private envelopes that arrived before identity/OTKs were ready.
+          await flushPendingSignalDecrypts();
         } catch {
           /* non-fatal — user can retry from Settings → Dispositivo E2E */
         } finally {
           // Force WS onto direct API (calls break if stuck on tunnel Worker).
           wsManager.reconnect(token);
+          void flushPendingSignalDecrypts();
         }
       })();
     }
