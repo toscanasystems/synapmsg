@@ -18,8 +18,12 @@ API `api.synapmsg.ai`, script `apps/api/scripts/proof-ws-reconnect-catchup.js` �
 
 ### Todavía no
 
-- **Dos teléfonos físicos** abiertos en un chat Privado durante un reinicio de Railway (Samsung no estaba en `adb devices` en esa sesión). Queda pendiente conectar el Samsung y repetir la 7.3 entre Toscana y Samsung.
-- Catch-up nuevo instalado en APK de release en ambos aparatos.
+- **Dos teléfonos físicos leyendo el texto tras reinicio.** Intento 2026-11-12 ~12:08–12:10 UTC-6 con APK **versionCode 77** en Toscana `RFCX41A9NQL` y Samsung `R5CYA03YERH`, ambos abiertos en el mismo chat Privado:
+  1. Antes del reinicio, Toscana envió `probe73_929475` y Samsung lo mostró en claro (`sameChat: true`).
+  2. `railway restart -y`; Toscana envió `f73ph_06945414` durante el rebote.
+  3. Tras volver, Samsung mostró burbujas nuevas (12:08 / 12:09) pero como «No se pudo descifrar (sesión Signal)» — el marco llegó (no saltó del todo), el texto no se leyó.
+  4. Por eso **no** se marca «Reconexión y recuperación probadas entre dos teléfonos reales.»
+- Sesiones Signal estables en ambos aparatos tras reinstalar APK (el fallo de descifrado bloqueó la lectura).
 
 ## 2026-11-12 — Fase 7.2 Límite de intentos (login / registro)
 
