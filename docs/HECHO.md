@@ -3,6 +3,20 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-12 — Cierre de sesión (APK liviano, HEAD, landing)
+
+### Demostrado
+
+APK de 52,6 MB, solo arm64-v8a, sin binarios de escritorio. Samsung: abre, manda y lee un mensaje Privado en claro.
+
+Descarga del APK: responde 200 a GET y a HEAD con el peso correcto.
+
+Landing: una sola sección de características, sin contradicciones. Sin llamadas. Alta sin correo.
+
+### Todavía no
+
+Reconexión con persona ajena al equipo (51-8974-3722) tras reinicio de producción: pendiente para mañana (ella no disponible al cierre). Script listo: `apps/api/scripts/restart-and-wait-health.js` / `railway restart -y -s api`.
+
 ## 2026-11-12 — Primer mensaje Privado (cuentas nuevas)
 
 ### Demostrado
