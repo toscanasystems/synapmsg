@@ -1,6 +1,6 @@
 /**
- * Synapmsg Private Number — Zangi-style 10-digit identity (not a real SIM).
- * Format display: XX-XXXX-XXXX
+ * Synapmsg Private Number — 10-digit find-me name (not a phone / SIM).
+ * Display: XX-XXXX-XXXX
  */
 
 import { randomInt } from 'crypto';
@@ -11,34 +11,37 @@ export function digitsOnly(raw: string): string {
 }
 
 export function formatPrivateNumber(digits: string): string {
-  const d = digitsOnly(digits).padStart(10, '0').slice(0, 10);
+  const d = digitsOnly(digits).slice(0, 10);
+  if (d.length !== 10) return d;
   return `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6, 10)}`;
 }
 
 export function looksLikePrivateNumber(raw: string): boolean {
   const d = digitsOnly(raw);
-  return d.length === 10;
+  return d.length === 10 && d[0] !== '0';
 }
 
-async function randomCandidate(): Promise<string> {
-  // 10 digits, avoid leading zeros-only look: 10..99 for first pair
-  let n = '';
-  for (let i = 0; i < 10; i++) n += String(randomInt(0, 10));
-  if (n === '0000000000') return randomCandidate();
+/** 10 digits, must not start with 0. */
+export function randomPrivateNumberCandidate(): string {
+  let n = String(randomInt(1, 10));
+  for (let i = 1; i < 10; i++) n += String(randomInt(0, 10));
   return n;
 }
 
-/** Allocate a unique 10-digit Private Number. */
+/**
+ * Allocate a unique 10-digit Private Number on the server.
+ * Max 5 attempts on collision (product rule).
+ */
 export async function allocatePrivateNumber(): Promise<string> {
-  for (let attempt = 0; attempt < 40; attempt++) {
-    const candidate = await randomCandidate();
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = randomPrivateNumberCandidate();
     const clash = await prisma.user.findFirst({
       where: { privateNumber: candidate },
       select: { id: true },
     });
     if (!clash) return candidate;
   }
-  throw new Error('Could not allocate private number');
+  throw new Error('Could not allocate private number after 5 attempts');
 }
 
 /** Ensure user has a Private Number; returns digits. */

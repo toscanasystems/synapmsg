@@ -18,10 +18,14 @@ export interface AuthTokenPayload extends JwtPayload {
 /**
  * Sign a JWT for the given user.
  */
-export function signToken(user: { id: string; email: string; username: string }): string {
+export function signToken(user: {
+  id: string;
+  email?: string | null;
+  username: string;
+}): string {
   const payload: AuthTokenPayload = {
     sub: user.id,
-    email: user.email,
+    email: user.email || '',
     username: user.username,
     iat: Math.floor(Date.now() / 1000),
   };

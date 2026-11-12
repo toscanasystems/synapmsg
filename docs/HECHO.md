@@ -3,6 +3,10 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-12 — Alta sin correo
+
+Alta sin correo: número único de 10 dígitos. No es una mejora de cifrado.
+
 ## 2026-11-12 — Fase 4 (PIN, clave por aparato, borrado remoto, coacción)
 
 ### Demostrado

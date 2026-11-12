@@ -113,6 +113,15 @@ router.post(
         return;
       }
 
+      if (!user.email) {
+        res.status(400).json({
+          error:
+            'Agregá un correo en Ajustes antes de comprar Premium (necesario para el recibo).',
+          code: 'email_required_for_billing',
+        });
+        return;
+      }
+
       // ── Recurrente (prioridad) ─────────────────────────────
       if (isRecurrenteConfigured()) {
         const session = await createRecurrenteCheckout({

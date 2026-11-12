@@ -17,7 +17,25 @@ import {
 
 const router = Router();
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SUPPORTED_LANGUAGES = new Set(APP_LANGUAGES);
+
+/** Search rate limit: max 20 queries / 15 min per user (blocks number guessing). */
+const SEARCH_WINDOW_MS = 15 * 60 * 1000;
+const SEARCH_MAX = 20;
+const searchHits = new Map<string, { n: number; resetAt: number }>();
+
+function takeSearchSlot(userId: string): boolean {
+  const now = Date.now();
+  const cur = searchHits.get(userId);
+  if (!cur || now >= cur.resetAt) {
+    searchHits.set(userId, { n: 1, resetAt: now + SEARCH_WINDOW_MS });
+    return true;
+  }
+  if (cur.n >= SEARCH_MAX) return false;
+  cur.n += 1;
+  return true;
+}
 
 router.use(authMiddleware);
 
@@ -217,17 +235,26 @@ router.post('/match', async (req: Request, res: Response, next: NextFunction) =>
 // ───────────────────────────────────────────────────────────
 router.get('/search', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    if (!takeSearchSlot(req.user!.id)) {
+      res.status(429).json({
+        error: 'Demasiadas búsquedas. Esperá un rato.',
+        code: 'search_rate_limited',
+      });
+      return;
+    }
+
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     if (!q) {
       res.json({ users: [] });
       return;
     }
 
-    // Private Number: exact 10-digit match only (no public directory scrape).
+    // Private Number: exact match only if the other user shared it (no directory).
     if (looksLikePrivateNumber(q)) {
       const hit = await prisma.user.findFirst({
         where: {
           privateNumber: digitsOnly(q),
+          privateNumberShared: true,
           id: { not: req.user!.id },
         },
       });
@@ -235,7 +262,7 @@ router.get('/search', async (req: Request, res: Response, next: NextFunction) =>
       return;
     }
 
-    // Username / email / name — intentional share; not a public phone book.
+    // Username / email / name — not a public phone book.
     const users = await prisma.user.findMany({
       where: {
         AND: [
@@ -292,11 +319,20 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 // ───────────────────────────────────────────────────────────
 router.patch('/me', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { name, preferredLanguage, preferredTranslateMode, pushToken } = (req.body ?? {}) as {
+    const {
+      name,
+      preferredLanguage,
+      preferredTranslateMode,
+      pushToken,
+      email,
+      privateNumberShared,
+    } = (req.body ?? {}) as {
       name?: unknown;
       preferredLanguage?: unknown;
       preferredTranslateMode?: unknown;
       pushToken?: unknown;
+      email?: unknown;
+      privateNumberShared?: unknown;
     };
 
     const data: Prisma.UserUpdateInput = {};
@@ -325,6 +361,32 @@ router.patch('/me', async (req: Request, res: Response, next: NextFunction) => {
     if (typeof pushToken === 'string') {
       data.pushToken = pushToken.trim() || null;
     }
+    if (typeof privateNumberShared === 'boolean') {
+      data.privateNumberShared = privateNumberShared;
+    }
+    if (typeof email === 'string') {
+      const normalized = email.trim().toLowerCase();
+      if (!EMAIL_REGEX.test(normalized)) {
+        res.status(400).json({ error: 'email inválido' });
+        return;
+      }
+      const me = await prisma.user.findUnique({ where: { id: req.user!.id } });
+      if (me?.email && me.email.toLowerCase() === normalized) {
+        // no-op same email
+      } else {
+        const taken = await prisma.user.findFirst({
+          where: {
+            email: { equals: normalized, mode: 'insensitive' },
+            id: { not: req.user!.id },
+          },
+        });
+        if (taken) {
+          res.status(409).json({ error: 'Ese correo ya está en uso', code: 'email_taken' });
+          return;
+        }
+        data.email = normalized;
+      }
+    }
 
     if (Object.keys(data).length === 0) {
       res.status(400).json({ error: 'No valid fields to update' });
@@ -338,6 +400,10 @@ router.patch('/me', async (req: Request, res: Response, next: NextFunction) => {
 
     res.json({ user: serializeUser(updated) });
   } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+      res.status(409).json({ error: 'Ese correo ya está en uso', code: 'email_taken' });
+      return;
+    }
     next(err);
   }
 });

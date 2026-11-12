@@ -32,6 +32,7 @@ interface AuthState {
   hydrate: () => Promise<void>;
   login: (payload: LoginRequest) => Promise<void>;
   register: (payload: RegisterRequest) => Promise<void>;
+  bootstrap: (preferredLanguage?: string) => Promise<void>;
   completeRecoveryLogin: (loginTicket: string, code: string) => Promise<void>;
   adoptSession: (token: string, user: User) => Promise<void>;
   logout: () => Promise<void>;
@@ -188,6 +189,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         wsManager.connect(token);
       } catch {
         /* WS is best-effort; auth already succeeded */
+      }
+    } catch (err) {
+      const message = mapAuthError(err);
+      set({ isLoading: false, error: message });
+      throw err;
+    }
+  },
+
+  bootstrap: async (preferredLanguage = 'es') => {
+    set({ isLoading: true, error: null });
+    try {
+      const { token, user } = await authApi.bootstrap(preferredLanguage);
+      setAuthToken(token);
+      set({ token, user, isLoading: false, error: null });
+      try {
+        await setAuthSession(token, JSON.stringify(user));
+      } catch {
+        /* persist best-effort */
+      }
+      try {
+        wsManager.connect(token);
+      } catch {
+        /* WS is best-effort */
       }
     } catch (err) {
       const message = mapAuthError(err);

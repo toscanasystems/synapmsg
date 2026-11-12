@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { randomBytes } from 'crypto';
 import bcrypt from 'bcrypt';
 import argon2 from 'argon2';
 import {
@@ -50,12 +51,13 @@ interface LoginBody {
  */
 function serializeUser(user: {
   id: string;
-  email: string;
+  email?: string | null;
   username: string;
   name: string;
   preferredLanguage: string;
   preferredTranslateMode: string;
   privateNumber?: string | null;
+  privateNumberShared?: boolean | null;
   plan?: string | null;
   planExpiresAt?: Date | null;
   mediaBytesUsed?: bigint | number | null;
@@ -73,11 +75,12 @@ function serializeUser(user: {
   const pn = user.privateNumber || null;
   return {
     id: user.id,
-    email: user.email,
+    email: user.email || null,
     username: user.username,
     name: user.name,
     privateNumber: pn,
     privateNumberFormatted: pn ? formatPrivateNumber(pn) : null,
+    privateNumberShared: Boolean(user.privateNumberShared),
     preferredLanguage: user.preferredLanguage,
     preferredTranslateMode: user.preferredTranslateMode,
     plan,
@@ -203,6 +206,80 @@ router.post('/register', async (req: Request, res: Response, next: NextFunction)
     });
 
     res.status(201).json({ token, user: serializeUser(user) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /auth/bootstrap
+ * First-open anonymous account: server allocates a unique 10-digit number.
+ * No email/phone required. Existing email accounts are untouched.
+ */
+router.post('/bootstrap', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const preferredLanguage =
+      typeof (req.body ?? {}).preferredLanguage === 'string' &&
+      SUPPORTED_LANGUAGES.has(
+        String((req.body as { preferredLanguage: string }).preferredLanguage).toLowerCase(),
+      )
+        ? String(
+            (req.body as { preferredLanguage: string }).preferredLanguage,
+          ).toLowerCase()
+        : 'es';
+
+    let privateNumber: string;
+    try {
+      privateNumber = await allocatePrivateNumber();
+    } catch {
+      res.status(503).json({
+        error: 'No se pudo asignar un número único. Probá de nuevo.',
+        code: 'number_collision',
+      });
+      return;
+    }
+    const username = `u${privateNumber}`;
+    const name = formatPrivateNumber(privateNumber);
+    const rounds = Number(process.env.BCRYPT_ROUNDS) || 10;
+    const passwordHash = await bcrypt.hash(randomBytes(32).toString('hex'), rounds);
+
+    let user;
+    try {
+      user = await prisma.user.create({
+        data: {
+          email: null,
+          username,
+          name,
+          passwordHash,
+          preferredLanguage,
+          privateNumber,
+          privateNumberShared: false,
+        },
+      });
+    } catch (createErr) {
+      const code = (createErr as { code?: string }).code;
+      if (code === 'P2002') {
+        res.status(409).json({
+          error: 'No se pudo asignar un número único. Probá de nuevo.',
+          code: 'number_collision',
+        });
+        return;
+      }
+      throw createErr;
+    }
+
+    const token = signToken({
+      id: user.id,
+      email: user.email,
+      username: user.username,
+    });
+
+    res.status(201).json({
+      token,
+      user: serializeUser(user),
+      warning:
+        'Si pierdes este teléfono y no agregaste un correo, no podrás recuperar la cuenta.',
+    });
   } catch (err) {
     next(err);
   }

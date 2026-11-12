@@ -15,12 +15,15 @@ datasource db {
 // ───────────────────────────────────────────────────────────
 model User {
   id                   String              @id @default(uuid()) @db.Uuid
-  email                String              @unique
+  /// Optional — existing accounts keep email; anonymous bootstrap may be null.
+  email                String?             @unique
   username             String              @unique
   name                 String
   passwordHash         String
-  /// Zangi-style 10-digit Private Number (not a real SIM). Digits only.
+  /// 10-digit find-me number (not a phone / SIM). Digits only, no leading 0.
   privateNumber        String?             @unique
+  /// If false, search-by-number does not return this profile.
+  privateNumberShared  Boolean             @default(false)
   preferredLanguage    String              @default("es")
   // "cloud" | "on-device" — validated at the API layer.
   // (Prisma enums disallow hyphens, so we store as String.)

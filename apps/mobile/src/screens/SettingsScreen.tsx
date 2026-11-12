@@ -146,6 +146,8 @@ export function SettingsScreen(): JSX.Element {
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editNameOpen, setEditNameOpen] = useState(false);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailDraft, setEmailDraft] = useState('');
   const [nameDraft, setNameDraft] = useState(user?.name ?? '');
   const [saving, setSaving] = useState(false);
   const [notificationsOn, setNotificationsOn] = useState(true);
@@ -602,12 +604,16 @@ export function SettingsScreen(): JSX.Element {
             <Text style={styles.profileMeta}>@{user.username}</Text>
             {user.privateNumberFormatted ? (
               <Text style={[styles.profileMeta, { color: colors.accent }]}>
-                Private Number · {user.privateNumberFormatted}
+                Número · {user.privateNumberFormatted}
               </Text>
             ) : null}
-            <Text style={styles.profileMeta} numberOfLines={1}>
-              {user.email}
-            </Text>
+            {user.email ? (
+              <Text style={styles.profileMeta} numberOfLines={1}>
+                {user.email}
+              </Text>
+            ) : (
+              <Text style={styles.profileMeta}>Sin correo de recuperación</Text>
+            )}
           </View>
           <Feather name="edit-2" size={20} color={colors.accent} />
         </Pressable>
@@ -619,12 +625,68 @@ export function SettingsScreen(): JSX.Element {
             <SettingsRow
               icon="hash"
               iconBg="#30B0B0"
-              title="Private Number"
-              subtitle={`${user.privateNumberFormatted} · sin SIM, solo quien lo sepa te encuentra`}
+              title="Tu número"
+              subtitle={`${user.privateNumberFormatted} · 10 dígitos, no es un teléfono`}
               onPress={() => {
                 void Share.share({
-                  message: `Mi Synap Private Number: ${user.privateNumberFormatted}\nAgregame en Synap con ese número (no es un celular).`,
+                  message: `Mi número Synap: ${user.privateNumberFormatted}\nAgregame en Synap con ese número (no es un celular).`,
                 });
+              }}
+            />
+            <SettingsRow
+              icon="eye"
+              iconBg="#2090A0"
+              title="Compartir número en búsquedas"
+              subtitle={
+                user.privateNumberShared
+                  ? 'Otros pueden encontrarte si saben el número'
+                  : 'Nadie te encuentra por número hasta que lo actives'
+              }
+              right={
+                <Switch
+                  value={Boolean(user.privateNumberShared)}
+                  onValueChange={(next) => {
+                    void (async () => {
+                      try {
+                        const updated = await usersApi.updateMe({
+                          privateNumberShared: next,
+                        });
+                        setUser(updated);
+                      } catch {
+                        Alert.alert('Error', 'No se pudo actualizar.');
+                      }
+                    })();
+                  }}
+                  trackColor={{ false: colors.border, true: colors.accent }}
+                  thumbColor="#fff"
+                />
+              }
+              last={!user.email ? false : true}
+            />
+            {!user.email ? (
+              <SettingsRow
+                icon="mail"
+                iconBg="#107090"
+                title="Agregar correo para recuperar"
+                subtitle="Opcional. Si perdés el teléfono sin correo, no hay recuperación."
+                onPress={() => {
+                  setEmailDraft('');
+                  setEmailModalOpen(true);
+                }}
+                last
+              />
+            ) : null}
+          </View>
+        ) : !user.email ? (
+          <View style={styles.card}>
+            <SettingsRow
+              icon="mail"
+              iconBg="#107090"
+              title="Agregar correo para recuperar"
+              subtitle="Opcional. Si perdés el teléfono sin correo, no hay recuperación."
+              onPress={() => {
+                setEmailDraft('');
+                setEmailModalOpen(true);
               }}
               last
             />
@@ -1489,6 +1551,78 @@ export function SettingsScreen(): JSX.Element {
               <Pressable
                 onPress={() => {
                   void handleSaveName();
+                }}
+                style={[styles.editBtn, styles.editBtnPrimary]}
+                disabled={saving}
+              >
+                <Text style={[styles.editBtnText, styles.editBtnPrimaryText]}>
+                  Guardar
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Optional recovery email */}
+      <Modal
+        visible={emailModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEmailModalOpen(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setEmailModalOpen(false)}
+        >
+          <Pressable
+            style={styles.editCard}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.modalTitle}>Agregar correo para recuperar</Text>
+            <Text style={{ color: colors.textSecondary, marginBottom: spacing.md }}>
+              Opcional. Solo para recuperar la cuenta más adelante.
+            </Text>
+            <TextInput
+              value={emailDraft}
+              onChangeText={setEmailDraft}
+              style={styles.nameInput}
+              placeholder="correo@ejemplo.com"
+              placeholderTextColor={colors.textSecondary}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+            />
+            <View style={styles.editActions}>
+              <Pressable
+                onPress={() => setEmailModalOpen(false)}
+                style={styles.editBtn}
+              >
+                <Text style={styles.editBtnText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  void (async () => {
+                    const next = emailDraft.trim().toLowerCase();
+                    if (!next.includes('@')) {
+                      Alert.alert('Correo', 'Ingresá un correo válido.');
+                      return;
+                    }
+                    setSaving(true);
+                    try {
+                      const updated = await usersApi.updateMe({ email: next });
+                      setUser(updated);
+                      setEmailModalOpen(false);
+                    } catch {
+                      Alert.alert(
+                        'Error',
+                        'No se pudo guardar el correo. ¿Ya está en uso?',
+                      );
+                    } finally {
+                      setSaving(false);
+                    }
+                  })();
                 }}
                 style={[styles.editBtn, styles.editBtnPrimary]}
                 disabled={saving}

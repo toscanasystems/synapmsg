@@ -57,12 +57,15 @@ export type PlanId = 'free' | 'premium';
 
 export interface User {
   id: string;
-  email: string;
+  /** Optional — anonymous bootstrap accounts have null until recovery email is added. */
+  email: string | null;
   username: string;
   name: string;
-  /** 10-digit Synapmsg Private Number (not a SIM). */
+  /** 10-digit Synapmsg Private Number (not a SIM / not a key). */
   privateNumber?: string | null;
   privateNumberFormatted?: string | null;
+  /** If false, search by number returns nothing (no public directory). */
+  privateNumberShared?: boolean;
   preferredLanguage: string;
   preferredTranslateMode: TranslateMode;
   plan?: PlanId;
@@ -213,6 +216,7 @@ export interface RegisterRequest {
 export interface AuthResponse {
   token: string;
   user: User;
+  warning?: string;
 }
 
 export interface MeResponse {
@@ -269,6 +273,8 @@ export interface UpdateUserRequest {
   preferredLanguage?: LanguageCode;
   preferredTranslateMode?: TranslateMode;
   pushToken?: string;
+  email?: string;
+  privateNumberShared?: boolean;
 }
 
 // ───────────────────────────────────────────────────────────
@@ -399,6 +405,7 @@ export type WsServerMessage =
 // Navigation
 // ───────────────────────────────────────────────────────────
 export type RootStackParamList = {
+  Bootstrap: undefined;
   Onboarding: undefined;
   Login: undefined;
   Register: undefined;

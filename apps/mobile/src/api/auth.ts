@@ -49,6 +49,14 @@ export const authApi = {
     return data;
   },
 
+  /** First-open anonymous account — server assigns Private Number. */
+  async bootstrap(preferredLanguage?: string): Promise<AuthResponse> {
+    const { data } = await apiClient.post<AuthResponse>('/auth/bootstrap', {
+      preferredLanguage: preferredLanguage ?? 'es',
+    });
+    return data;
+  },
+
   async me(): Promise<MeResponse> {
     const { data } = await apiClient.get<MeResponse>('/auth/me');
     return data;

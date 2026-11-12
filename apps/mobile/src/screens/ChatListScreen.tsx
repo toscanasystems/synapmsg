@@ -160,7 +160,14 @@ export function ChatListScreen(): JSX.Element {
             style={styles.brandLogo}
             accessibilityLabel="Synap"
           />
-          <Text style={styles.headerTitle}>Synap</Text>
+          <View>
+            <Text style={styles.headerTitle}>Synap</Text>
+            {me?.privateNumberFormatted || me?.privateNumber ? (
+              <Text style={styles.myNumber}>
+                {me.privateNumberFormatted ?? me.privateNumber}
+              </Text>
+            ) : null}
+          </View>
           <View
             style={[
               styles.planChip,
@@ -597,6 +604,13 @@ const styles = StyleSheet.create({
     fontSize: fontSize.h2,
     fontWeight: fontWeight.bold,
     letterSpacing: -0.5,
+  },
+  myNumber: {
+    color: colors.accent,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.semibold,
+    marginTop: 2,
+    letterSpacing: 0.5,
   },
   planChip: {
     marginLeft: spacing.sm,

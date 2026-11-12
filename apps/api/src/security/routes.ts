@@ -317,7 +317,7 @@ router.post(
       const options = await generateRegistrationOptions({
         rpName: RP_NAME,
         rpID: RP_ID,
-        userName: user.email,
+        userName: user.email || user.username,
         userDisplayName: user.name,
         userID: new TextEncoder().encode(user.id.replace(/-/g, '').slice(0, 32)),
         attestationType: 'none',

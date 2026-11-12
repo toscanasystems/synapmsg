@@ -31,7 +31,7 @@
         "backgroundColor": "#000000"
       },
       "package": "com.synapmsg.app",
-      "versionCode": 69,
+      "versionCode": 70,
       "permissions": [
         "READ_CONTACTS",
         "CAMERA",
