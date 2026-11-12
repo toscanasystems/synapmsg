@@ -8,7 +8,7 @@ import {
   type TextInputProps,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import colors from '../../theme/colors';
+import colors, { themed } from '../../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../../theme/spacing';
 import type { FeatherIconName } from '../../types/iconNames';
 
@@ -95,7 +95,7 @@ export function AuthPasswordToggle(props: {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   wrap: { marginBottom: spacing.xl },
   label: {
     color: colors.textSecondary,
@@ -136,6 +136,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   eye: { padding: spacing.sm, marginLeft: spacing.sm },
-});
+}));
 
 export default AuthField;

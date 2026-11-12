@@ -17,7 +17,7 @@ import {
 } from 'react-native';
 import { Audio } from 'expo-av';
 import { Feather } from '@expo/vector-icons';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
 import { Message, languageLabel } from '../types';
 import { TranslationBadge } from './TranslationBadge';
@@ -663,7 +663,7 @@ export function ChatBubble({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   row: {
     width: '100%',
     paddingHorizontal: spacing.xl,
@@ -880,6 +880,6 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     fontSize: fontSize.bodyLg,
   },
-});
+}));
 
 export default ChatBubble;

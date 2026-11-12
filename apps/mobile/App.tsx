@@ -8,10 +8,10 @@ import { StatusBar } from 'expo-status-bar';
 import {
   ActivityIndicator,
   View,
-  StyleSheet,
   LogBox,
   AppState,
   AppStateStatus,
+  Appearance,
   Linking,
   Alert,
 } from 'react-native';
@@ -23,12 +23,13 @@ import {
 } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-import colors from './src/theme/colors';
+import colors, { themed } from './src/theme/colors';
 import { useAuthStore } from './src/store/auth';
 import { useChatsStore, registerWebSocketListener } from './src/store/chats';
 import { useChatPrefsStore } from './src/store/chatPrefs';
 import { useAppLockStore } from './src/store/appLock';
 import { useHiddenChatsStore } from './src/store/hiddenChats';
+import { useThemeStore } from './src/store/theme';
 import { RootStackParamList } from './src/types';
 import wsManager from './src/api/websocket';
 import { AppLockGate } from './src/components/AppLockGate';
@@ -68,10 +69,11 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 function RootNavigator(): JSX.Element {
   const isHydrated = useAuthStore((s) => s.isHydrated);
   const token = useAuthStore((s) => s.token);
+  const bg = useThemeStore((s) => s.colors.background);
 
   if (!isHydrated) {
     return (
-      <View style={styles.loading}>
+      <View style={[styles.loading, { backgroundColor: bg }]}>
         <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
@@ -82,7 +84,7 @@ function RootNavigator(): JSX.Element {
       screenOptions={{
         headerShown: false,
         animation: 'slide_from_right',
-        contentStyle: { backgroundColor: colors.background },
+        contentStyle: { backgroundColor: bg },
       }}
     >
       {token ? (
@@ -113,6 +115,10 @@ export default function App(): JSX.Element {
   const hydratePrefs = useChatPrefsStore((s) => s.hydrate);
   const hydrateLock = useAppLockStore((s) => s.hydrate);
   const hydrateHidden = useHiddenChatsStore((s) => s.hydrate);
+  const hydrateTheme = useThemeStore((s) => s.hydrate);
+  const syncSystemTheme = useThemeStore((s) => s.syncSystem);
+  const themeScheme = useThemeStore((s) => s.scheme);
+  const themeColors = useThemeStore((s) => s.colors);
   const duressTriggered = useAppLockStore((s) => s.duressTriggered);
   const clearDuressFlag = useAppLockStore((s) => s.clearDuressFlag);
   const logout = useAuthStore((s) => s.logout);
@@ -127,6 +133,7 @@ export default function App(): JSX.Element {
   useEffect(() => {
     void (async () => {
       await hydrateVpnRouting();
+      await hydrateTheme();
       await hydrate();
       await hydratePrefs();
       await hydrateLock();
@@ -134,7 +141,14 @@ export default function App(): JSX.Element {
       // Native enclave probe (root/Frida/StrongBox) — caches for mayDecryptE2e.
       void assessDeviceRiskAsync();
     })();
-  }, [hydrate, hydratePrefs, hydrateLock, hydrateHidden]);
+  }, [hydrate, hydratePrefs, hydrateLock, hydrateHidden, hydrateTheme]);
+
+  useEffect(() => {
+    const sub = Appearance.addChangeListener(({ colorScheme }) => {
+      syncSystemTheme(colorScheme);
+    });
+    return () => sub.remove();
+  }, [syncSystemTheme]);
 
   // Fase 4 prove + FIDO2 return: synapmsg://prove/phase4… · synapmsg://auth/fido2?token=
   useEffect(() => {
@@ -433,21 +447,26 @@ export default function App(): JSX.Element {
 
   const navTheme = {
     ...DefaultTheme,
+    dark: themeScheme === 'dark',
     colors: {
       ...DefaultTheme.colors,
-      background: colors.background,
-      card: colors.surface,
-      text: colors.textPrimary,
-      border: colors.border,
-      primary: colors.accent,
+      background: themeColors.background,
+      card: themeColors.surface,
+      text: themeColors.textPrimary,
+      border: themeColors.border,
+      primary: themeColors.accent,
     },
   };
 
   return (
     <SafeAreaProvider>
       <AppLockGate>
-        <NavigationContainer ref={navRef} theme={navTheme}>
-          <StatusBar style="light" />
+        <NavigationContainer
+          key={themeScheme}
+          ref={navRef}
+          theme={navTheme}
+        >
+          <StatusBar style={themeScheme === 'dark' ? 'light' : 'dark'} />
           <RootNavigator />
         </NavigationContainer>
       </AppLockGate>
@@ -455,11 +474,11 @@ export default function App(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   loading: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.background,
   },
-});
+}));

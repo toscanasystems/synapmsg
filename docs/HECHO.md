@@ -3,6 +3,34 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-12 — Fase 6.6 Temas claro / oscuro
+
+### Demostrado
+
+Script `apps/mobile/scripts/proof-theme-persist.js` → `ok:true`.
+
+1. Clave AsyncStorage `@synapmsg/theme_mode_v1`; modo `light` sobrevive un “reinicio” (get tras set).
+2. `system` respeta el esquema del SO; `light`/`dark` lo fijan.
+3. UI: Ajustes → Apariencia (Oscuro / Claro / Sistema); paletas con accent `#30B0B0`.
+
+### Todavía no
+
+- Captura visual en APK instalado con tema claro.
+
+## 2026-11-12 — Fase 6.5 Encuestas en chat
+
+### Demostrado
+
+API `api.synapmsg.ai`, script `apps/api/scripts/proof-poll-two-votes.js` → `ok:true`.
+
+1. Chat Nube; encuesta «¿Café o té?» con dos opciones.
+2. Dos usuarios votan distinto; `totalVotes: 2`, un voto por opción.
+3. UI: menú del chat → encuesta (solo Nube).
+
+### Todavía no
+
+- Encuestas en chats Privados (E2E) — bloqueadas a propósito (conteo en servidor).
+
 ## 2026-11-12 — Fase 6.4 Editar mensaje (48 h)
 
 ### Demostrado

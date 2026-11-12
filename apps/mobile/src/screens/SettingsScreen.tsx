@@ -25,10 +25,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
 import { useAuthStore } from '../store/auth';
 import { useAppLockStore } from '../store/appLock';
+import { useThemeStore, type ThemeMode } from '../store/theme';
 import { usersApi } from '../api/messages';
 import {
   LANGUAGES,
@@ -148,6 +149,8 @@ export function SettingsScreen(): JSX.Element {
   const token = useAuthStore((s) => s.token);
   const logout = useAuthStore((s) => s.logout);
   const setUser = useAuthStore((s) => s.setUser);
+  const themeMode = useThemeStore((s) => s.mode);
+  const setThemeMode = useThemeStore((s) => s.setMode);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editNameOpen, setEditNameOpen] = useState(false);
@@ -814,6 +817,34 @@ export function SettingsScreen(): JSX.Element {
                 ],
               );
             }}
+          />
+        </View>
+
+        {/* Apariencia */}
+        <View style={styles.card}>
+          <SettingsRow
+            icon="moon"
+            iconBg="#5856D6"
+            title="Apariencia"
+            subtitle={
+              themeMode === 'light'
+                ? 'Claro'
+                : themeMode === 'system'
+                  ? 'Igual que el sistema'
+                  : 'Oscuro'
+            }
+            onPress={() => {
+              const pick = (mode: ThemeMode) => {
+                void setThemeMode(mode);
+              };
+              Alert.alert('Apariencia', 'Elige el tema de Synapmsg', [
+                { text: 'Oscuro', onPress: () => pick('dark') },
+                { text: 'Claro', onPress: () => pick('light') },
+                { text: 'Sistema', onPress: () => pick('system') },
+                { text: 'Cancelar', style: 'cancel' },
+              ]);
+            }}
+            last
           />
         </View>
 
@@ -1906,7 +1937,7 @@ export function SettingsScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   container: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: 'row',
@@ -2076,6 +2107,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-});
+}));
 
 export default SettingsScreen;

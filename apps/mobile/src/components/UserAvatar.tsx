@@ -9,7 +9,7 @@
 
 import React, { memo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, avatarPalette, radius } from '../theme/spacing';
 
 interface UserAvatarProps {
@@ -59,7 +59,7 @@ function UserAvatarComponent({ name, size = 44 }: UserAvatarProps): JSX.Element 
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   circle: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
     letterSpacing: 0.5,
   },
-});
+}));
 
 export const UserAvatar = memo(UserAvatarComponent);
 export default UserAvatar;

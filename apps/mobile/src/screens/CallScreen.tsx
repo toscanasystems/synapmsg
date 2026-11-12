@@ -20,7 +20,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, spacing } from '../theme/spacing';
 import { RootStackParamList } from '../types';
 import { useAuthStore } from '../store/auth';
@@ -442,7 +442,7 @@ export function CallScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   root: {
     flex: 1,
     backgroundColor: '#0B141A',
@@ -533,6 +533,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.caption,
     lineHeight: 18,
   },
-});
+}));
 
 export default CallScreen;

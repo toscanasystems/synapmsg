@@ -11,7 +11,7 @@ import {
   StyleSheet,
   ScrollView,
 } from 'react-native';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
 
 export type ChatMenuAction =
@@ -131,7 +131,7 @@ export function ChatHeaderMenu({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   backdrop: {
     flex: 1,
     backgroundColor: colors.overlay,
@@ -166,6 +166,6 @@ const styles = StyleSheet.create({
     color: colors.error,
     fontWeight: fontWeight.semibold,
   },
-});
+}));
 
 export default ChatHeaderMenu;

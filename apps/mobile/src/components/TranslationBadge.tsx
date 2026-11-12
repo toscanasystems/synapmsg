@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { Pressable, Text, StyleSheet, ViewStyle } from 'react-native';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
 import { languageFlag, languageLabel } from '../types';
 
@@ -37,7 +37,7 @@ export function TranslationBadge({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   badge: {
     alignSelf: 'flex-start',
     backgroundColor: colors.badgeBackground,
@@ -61,6 +61,6 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.medium,
     marginTop: 2,
   },
-});
+}));
 
 export default TranslationBadge;

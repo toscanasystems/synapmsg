@@ -20,7 +20,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
 import { useAuthStore } from '../store/auth';
 import { API_BASE_URL } from '../api/client';
@@ -249,7 +249,7 @@ export function ToolsScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   root: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: 'row',
@@ -328,6 +328,6 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     fontSize: fontSize.md,
   },
-});
+}));
 
 export default ToolsScreen;

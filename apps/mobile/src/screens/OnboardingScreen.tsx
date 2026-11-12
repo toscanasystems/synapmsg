@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
 import { RootStackParamList } from '../types';
 import { FeatherIconName } from '../types/iconNames';
@@ -166,7 +166,7 @@ export function OnboardingScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   container: {
     flex: 1,
     backgroundColor: colors.background,
@@ -265,6 +265,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: colors.accent,
   },
-});
+}));
 
 export default OnboardingScreen;

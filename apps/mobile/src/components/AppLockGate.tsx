@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
 import { useAppLockStore } from '../store/appLock';
 
@@ -96,7 +96,7 @@ export function AppLockGate({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   loading: {
     flex: 1,
     alignItems: 'center',
@@ -158,6 +158,6 @@ const styles = StyleSheet.create({
     color: colors.accent,
     fontWeight: fontWeight.semibold,
   },
-});
+}));
 
 export default AppLockGate;

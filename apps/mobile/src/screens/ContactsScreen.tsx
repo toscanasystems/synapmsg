@@ -25,7 +25,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
 import { useChatsStore } from '../store/chats';
 import { RootStackParamList, User } from '../types';
@@ -386,7 +386,7 @@ export function ContactsScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   container: { flex: 1, backgroundColor: colors.background },
   header: {
     flexDirection: 'row',
@@ -500,6 +500,6 @@ const styles = StyleSheet.create({
   },
   permLink: { marginTop: spacing.lg, alignItems: 'center' },
   permLinkText: { color: colors.accent, fontSize: fontSize.body },
-});
+}));
 
 export default ContactsScreen;

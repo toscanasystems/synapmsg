@@ -23,7 +23,7 @@ import {
   AuthPrimaryButton,
   AuthLinkRow,
 } from '../components/auth/AuthScreen';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
 import { LANGUAGES, LanguageCode, RootStackParamList } from '../types';
 
@@ -289,7 +289,7 @@ export function RegisterScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   langLabel: {
     color: colors.textSecondary,
     fontSize: fontSize.caption,
@@ -356,6 +356,6 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontSize: fontSize.bodyLg,
   },
-});
+}));
 
 export default RegisterScreen;

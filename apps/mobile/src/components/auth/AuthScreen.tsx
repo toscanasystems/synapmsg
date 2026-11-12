@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import colors from '../../theme/colors';
+import colors, { themed } from '../../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../../theme/spacing';
 import { AuthFeedback } from '../AuthFeedback';
 
@@ -141,7 +141,7 @@ export function AuthLinkRow(props: {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   flex: { flex: 1, backgroundColor: colors.background },
   glow: {
     position: 'absolute',
@@ -216,4 +216,4 @@ const styles = StyleSheet.create({
   linkWrap: { alignItems: 'center', marginTop: spacing.xxl },
   link: { color: colors.textSecondary, fontSize: fontSize.body },
   linkAction: { color: colors.accent, fontWeight: fontWeight.semibold },
-});
+}));

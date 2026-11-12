@@ -1,52 +1,72 @@
 /**
  * Synapmsg brand color palette.
- * Paleta REAL extraída del logo de Toscana Systems (cyan-teal + negro).
- * All UI surfaces must import colors from here — never hard-code hex values
- * inside components or screens.
- *
- * Source: Análisis pixel-por-pixel del logo Toscana Systems (2025-11-10)
+ * `themed()` builds StyleSheet proxies that resolve against the active scheme.
+ * Default `colors` export is kept in sync for JSX reads during render.
  */
 
-export const colors = {
-  // Core brand — paleta Toscana Systems
-  primary: '#000000',         // Negro fondo principal (logo Toscana)
-  accent: '#30B0B0',          // Teal Principal (20% del logo original)
-  accentLight: '#40C0C0',     // Cyan Brillante (highlights)
-  accentMid: '#2090A0',        // Teal Medio (degradado)
-  accentDark: '#107090',      // Teal Oscuro (profundidad)
-  background: '#0A0A0A',       // Negro suave (fondos de app)
-  surface: '#1A1A1A',          // Gris muy oscuro (tarjetas sobre negro)
-  surfaceLight: '#F5F5F5',     // Para modo claro (uso futuro)
+import { useMemo } from 'react';
+import { StyleSheet } from 'react-native';
+import { useThemeStore } from '../store/theme';
+import { darkColors, type AppColors } from './palettes';
 
-  // Text
-  textPrimary: '#FFFFFF',      // Blanco sobre negro
-  textSecondary: '#A0A0A0',    // Gris claro para texto secundario
-  textMuted: '#606060',         // Gris medio para texto deshabilitado
-  textInverse: '#000000',      // Negro sobre fondos claros
+export type { AppColors } from './palettes';
+export { darkColors, lightColors } from './palettes';
 
-  // Chat — tipografía verde fluorescente (elegante / terminal)
-  chatNeon: '#39FF14',         // Verde fluorescente mensajes
-  chatNeonDim: 'rgba(57, 255, 20, 0.55)', // Meta / timestamps
-  chatBubbleMine: 'rgba(57, 255, 20, 0.08)',
-  chatBubbleTheirs: 'rgba(26, 26, 26, 0.92)',
-  chatBubbleBorder: 'rgba(57, 255, 20, 0.28)',
+/** Live palette — Object.assign on theme change for JSX that reads colors.X. */
+export const colors: AppColors = { ...darkColors };
 
-  // Status
-  success: '#3CB371',          // Verde menta (mantiene semántica)
-  error: '#E57373',             // Rojo suave (legible sobre negro)
-  warning: '#FFB74D',           // Naranja suave (legible sobre negro)
+useThemeStore.subscribe((s) => {
+  Object.assign(colors, s.colors);
+});
 
-  // Translation badge backgrounds / accents
-  badgeBackground: 'rgba(48, 176, 176, 0.15)',  // Teal translúcido
-  badgeText: '#40C0C0',                          // Cyan brillante
+export function useColors(): AppColors {
+  return useThemeStore((s) => s.colors);
+}
 
-  // UI helpers
-  border: '#2A2A2A',            // Gris oscuro para bordes sutiles
-  inputBackground: '#1F1F1F',    // Para campos de texto sobre negro
-  overlay: 'rgba(0, 0, 0, 0.7)',  // Overlay modal
-  ripple: 'rgba(48, 176, 176, 0.2)', // Ripple effect teal
-} as const;
+/**
+ * Drop-in for `StyleSheet.create`. Returns a proxy; each access rebuilds
+ * styles when the active scheme changes. Pair with remounting the tree
+ * (NavigationContainer key={scheme}) or a useColors() subscription.
+ *
+ *   const styles = themed((colors) => ({
+ *     container: { backgroundColor: colors.background },
+ *   }));
+ */
+export function themed<T extends StyleSheet.NamedStyles<T> | StyleSheet.NamedStyles<any>>(
+  factory: (c: AppColors) => T,
+): T {
+  let cacheScheme: string | null = null;
+  let cache: T | null = null;
+  const ensure = (): T => {
+    const { scheme, colors: c } = useThemeStore.getState();
+    if (cache && cacheScheme === scheme) return cache;
+    cacheScheme = scheme;
+    cache = StyleSheet.create(factory(c)) as T;
+    return cache;
+  };
+  return new Proxy({} as T, {
+    get(_target, prop, receiver) {
+      if (prop === '__proto__') return Reflect.get(_target, prop, receiver);
+      const sheet = ensure() as Record<string | symbol, unknown>;
+      return sheet[prop as string];
+    },
+    has(_target, prop) {
+      return prop in (ensure() as object);
+    },
+    ownKeys() {
+      return Reflect.ownKeys(ensure() as object);
+    },
+    getOwnPropertyDescriptor(_target, prop) {
+      return Reflect.getOwnPropertyDescriptor(ensure() as object, prop);
+    },
+  });
+}
 
-export type ColorName = keyof typeof colors;
+export function useThemedStyles<T extends StyleSheet.NamedStyles<T> | StyleSheet.NamedStyles<any>>(
+  factory: (c: AppColors) => T,
+): T {
+  const c = useColors();
+  return useMemo(() => StyleSheet.create(factory(c)), [c]);
+}
 
 export default colors;

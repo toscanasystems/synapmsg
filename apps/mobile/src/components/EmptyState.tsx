@@ -6,7 +6,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, spacing } from '../theme/spacing';
 import { FeatherIconName } from '../types/iconNames';
 
@@ -35,7 +35,7 @@ export function EmptyState({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   container: {
     flex: 1,
     alignItems: 'center',
@@ -67,6 +67,6 @@ const styles = StyleSheet.create({
   actionWrap: {
     marginTop: spacing.xl,
   },
-});
+}));
 
 export default EmptyState;

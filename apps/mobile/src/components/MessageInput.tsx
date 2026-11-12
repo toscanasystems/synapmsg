@@ -13,7 +13,7 @@ import {
   Alert,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
 import { AttachSheet, AttachAction } from './AttachSheet';
 import { assistCompose, COMPOSE_TONES, ComposeTone } from '../i18n/composeAssist';
@@ -228,7 +228,7 @@ export function MessageInput({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   replyBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -296,6 +296,6 @@ const styles = StyleSheet.create({
   sendButtonPressed: {
     opacity: 0.5,
   },
-});
+}));
 
 export default MessageInput;

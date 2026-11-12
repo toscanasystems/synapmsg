@@ -14,7 +14,7 @@ import {
   StyleSheet,
   ActivityIndicatorProps,
 } from 'react-native';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, spacing } from '../theme/spacing';
 
 interface LoadingProps extends Pick<ActivityIndicatorProps, 'size'> {
@@ -43,7 +43,7 @@ export function Loading({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   fullScreen: {
     flex: 1,
     backgroundColor: colors.background,
@@ -65,6 +65,6 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     fontSize: fontSize.caption,
   },
-});
+}));
 
 export default Loading;

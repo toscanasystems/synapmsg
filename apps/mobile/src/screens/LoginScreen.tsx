@@ -14,7 +14,7 @@ import {
   AuthPrimaryButton,
   AuthLinkRow,
 } from '../components/auth/AuthScreen';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, spacing } from '../theme/spacing';
 import { RootStackParamList } from '../types';
 
@@ -155,7 +155,7 @@ export function LoginScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   hint: {
     color: colors.textMuted,
     fontSize: fontSize.caption,
@@ -163,6 +163,6 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
     marginLeft: spacing.xs,
   },
-});
+}));
 
 export default LoginScreen;

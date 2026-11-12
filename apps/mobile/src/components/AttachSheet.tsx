@@ -11,7 +11,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
 
 export type AttachAction =
@@ -86,7 +86,7 @@ export function AttachSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -134,6 +134,6 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     textAlign: 'center',
   },
-});
+}));
 
 export default AttachSheet;

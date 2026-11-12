@@ -5,7 +5,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
 
 type Kind = 'error' | 'info';
@@ -42,7 +42,7 @@ export function AuthFeedback(props: {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   wrap: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -68,6 +68,6 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.medium,
     lineHeight: 20,
   },
-});
+}));
 
 export default AuthFeedback;

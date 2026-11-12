@@ -29,7 +29,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as Contacts from 'expo-contacts';
 import * as Location from 'expo-location';
 import { Audio } from 'expo-av';
-import colors from '../theme/colors';
+import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
 import { useAuthStore } from '../store/auth';
 import { useChatsStore } from '../store/chats';
@@ -1560,7 +1560,7 @@ export function ChatScreen(): JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed((colors) => ({
   flex: { flex: 1, backgroundColor: colors.background },
   container: { flex: 1 },
   wallpaper: { opacity: 0.35 },
@@ -1707,6 +1707,6 @@ const styles = StyleSheet.create({
     color: colors.textInverse,
     fontWeight: fontWeight.bold,
   },
-});
+}));
 
 export default ChatScreen;
