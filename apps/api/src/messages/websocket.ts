@@ -324,17 +324,18 @@ export class HttpError extends Error {
  *
  * Returns the saved message (with sender info) for HTTP responses.
  */
+const DISAPPEAR_SECONDS = new Set([30, 3600, 86400, 604800]);
+
 function computeExpiresAt(
   chat: {
     disappearHours: number;
+    disappearSeconds?: number;
     disappearText: boolean;
     disappearImage: boolean;
     disappearAudio: boolean;
   },
   mediaType?: string | null,
 ): Date | null {
-  const hours = chat.disappearHours;
-  if (![1, 6, 12, 24].includes(hours)) return null;
   const kind =
     mediaType === 'image'
       ? 'image'
@@ -344,6 +345,13 @@ function computeExpiresAt(
   if (kind === 'text' && !chat.disappearText) return null;
   if (kind === 'image' && !chat.disappearImage) return null;
   if (kind === 'audio' && !chat.disappearAudio) return null;
+
+  const sec = Number(chat.disappearSeconds) || 0;
+  if (DISAPPEAR_SECONDS.has(sec)) {
+    return new Date(Date.now() + sec * 1000);
+  }
+  const hours = chat.disappearHours;
+  if (![1, 6, 12, 24].includes(hours)) return null;
   return new Date(Date.now() + hours * 60 * 60 * 1000);
 }
 

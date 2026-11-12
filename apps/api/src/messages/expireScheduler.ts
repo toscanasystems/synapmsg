@@ -55,7 +55,7 @@ export function startExpireScheduler(): void {
   void flushExpired();
   timer = setInterval(() => {
     void flushExpired();
-  }, 30_000);
+  }, 5_000);
   // eslint-disable-next-line no-console
   console.log('[expire] autodestruct worker started');
 }

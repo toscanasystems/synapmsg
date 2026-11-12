@@ -141,6 +141,8 @@ export interface Chat {
   name?: string | null;
   encryptionMode?: ChatEncryptionMode;
   disappearHours?: number;
+  /** 0 | 30 | 3600 | 86400 | 604800 */
+  disappearSeconds?: number;
   disappearText?: boolean;
   disappearImage?: boolean;
   disappearAudio?: boolean;

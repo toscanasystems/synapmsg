@@ -3,6 +3,20 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-12 — Fase 6.2 Mensajes que se borran solos
+
+### Demostrado
+
+API `api.synapmsg.ai`, script `apps/api/scripts/proof-disappear-30s.js` → `ok:true`.
+
+1. Chat con `disappearSeconds: 30`; mensaje con `expiresAt`.
+2. Tras ~40 s el worker marca `deletedAt` y vacía `originalText` (bilateral en servidor; ambos clientes reciben `message_deleted`).
+3. UI: plazos 30 s / 1 h / 1 día / 1 semana.
+
+### Todavía no
+
+- Prueba visual simultánea en dos teléfonos con el menú de 30 s (lab usó API + Toscana/Samsung como participantes del chat).
+
 ## 2026-11-12 — Fase 6.1 Grupos Privados (fan-out ≤50)
 
 ### Demostrado

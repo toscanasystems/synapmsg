@@ -108,19 +108,22 @@ export const chatsApi = {
   async setDisappear(
     chatId: string,
     payload: {
-      hours: 0 | 1 | 6 | 12 | 24;
+      hours?: 0 | 1 | 6 | 12 | 24;
+      seconds?: 0 | 30 | 3600 | 86400 | 604800;
       text?: boolean;
       image?: boolean;
       audio?: boolean;
     },
   ): Promise<{
     disappearHours: number;
+    disappearSeconds?: number;
     disappearText: boolean;
     disappearImage: boolean;
     disappearAudio: boolean;
   }> {
     const { data } = await apiClient.patch<{
       disappearHours: number;
+      disappearSeconds?: number;
       disappearText: boolean;
       disappearImage: boolean;
       disappearAudio: boolean;

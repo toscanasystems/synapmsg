@@ -21,6 +21,7 @@ interface ChatWithPreview {
   name: string | null;
   encryptionMode: 'cloud' | 'e2e';
   disappearHours: number;
+  disappearSeconds: number;
   disappearText: boolean;
   disappearImage: boolean;
   disappearAudio: boolean;
@@ -86,6 +87,11 @@ async function buildChatPreview(
     encryptionMode: chat.encryptionMode === 'e2e' ? 'e2e' : 'cloud',
     disappearHours: [0, 1, 6, 12, 24].includes(chat.disappearHours)
       ? chat.disappearHours
+      : 0,
+    disappearSeconds: [0, 30, 3600, 86400, 604800].includes(
+      chat.disappearSeconds ?? 0,
+    )
+      ? chat.disappearSeconds
       : 0,
     disappearText: chat.disappearText,
     disappearImage: chat.disappearImage,
@@ -462,14 +468,22 @@ router.patch(
       }
       const body = (req.body ?? {}) as {
         hours?: unknown;
+        seconds?: unknown;
         text?: unknown;
         image?: unknown;
         audio?: unknown;
       };
       const hoursRaw = Number(body.hours);
       const hours = [0, 1, 6, 12, 24].includes(hoursRaw) ? hoursRaw : 0;
+      const secRaw = Number(body.seconds);
+      const seconds = [0, 30, 3600, 86400, 604800].includes(secRaw)
+        ? secRaw
+        : body.seconds === undefined && hours > 0
+          ? hours * 3600
+          : 0;
       const data = {
-        disappearHours: hours,
+        disappearHours: seconds > 0 ? 0 : hours,
+        disappearSeconds: seconds,
         disappearText:
           typeof body.text === 'boolean' ? body.text : undefined,
         disappearImage:
@@ -481,6 +495,7 @@ router.patch(
         where: { id },
         data: {
           disappearHours: data.disappearHours,
+          disappearSeconds: data.disappearSeconds,
           ...(data.disappearText !== undefined
             ? { disappearText: data.disappearText }
             : {}),
@@ -496,6 +511,7 @@ router.patch(
         type: 'disappear_updated',
         chatId: id,
         disappearHours: updated.disappearHours,
+        disappearSeconds: updated.disappearSeconds,
         disappearText: updated.disappearText,
         disappearImage: updated.disappearImage,
         disappearAudio: updated.disappearAudio,

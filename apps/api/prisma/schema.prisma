@@ -195,8 +195,10 @@ model Chat {
   name      String?
   // "cloud" | "e2e" — default E2E (absolute security); cloud = sync+MT
   encryptionMode String @default("e2e")
-  /// Autodestrucción bilateral: 0 | 1 | 6 | 12 | 24 (horas)
+  /// Legacy windows: 0 | 1 | 6 | 12 | 24 (horas). Prefer disappearSeconds.
   disappearHours Int @default(0)
+  /// Autodestrucción bilateral en segundos: 0 | 30 | 3600 | 86400 | 604800
+  disappearSeconds Int @default(0)
   disappearText  Boolean @default(true)
   disappearImage Boolean @default(true)
   disappearAudio Boolean @default(true)

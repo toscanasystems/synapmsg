@@ -7,8 +7,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const KEY = '@synapmsg/chat_prefs_v1';
 
-/** Bilateral autodestruct windows (hours). */
-export type DisappearHours = 0 | 1 | 6 | 12 | 24;
+/** Bilateral autodestruct windows (seconds). Legacy hours mapped on hydrate. */
+export type DisappearHours = 0 | 30 | 3600 | 86400 | 604800 | 1 | 6 | 12 | 24;
 
 export type DisappearTypes = {
   text: boolean;
@@ -56,9 +56,15 @@ const DEFAULT_TYPES: DisappearTypes = {
 
 function normalizeHours(raw: unknown): DisappearHours {
   const n = Number(raw);
-  return ([0, 1, 6, 12, 24] as const).includes(n as DisappearHours)
-    ? (n as DisappearHours)
-    : 0;
+  if (([30, 3600, 86400, 604800] as const).includes(n as 30)) {
+    return n as DisappearHours;
+  }
+  // Legacy hour presets → seconds
+  if (n === 1) return 3600;
+  if (n === 6) return 21600;
+  if (n === 12) return 43200;
+  if (n === 24) return 86400;
+  return 0;
 }
 
 async function save(

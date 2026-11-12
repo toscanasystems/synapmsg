@@ -158,13 +158,22 @@ export function ChatScreen(): JSX.Element {
             p.userId === me?.id ? `${p.user.name} (tú)` : p.user.name,
           ),
         );
+        const secRaw = Number(detail.chat?.disappearSeconds ?? 0);
         const hoursRaw = Number(detail.chat?.disappearHours ?? 0);
-        const hours = ([0, 1, 6, 12, 24] as const).includes(
-          hoursRaw as 0 | 1 | 6 | 12 | 24,
+        const sec = ([30, 3600, 86400, 604800] as const).includes(
+          secRaw as 30,
         )
-          ? (hoursRaw as 0 | 1 | 6 | 12 | 24)
-          : 0;
-        setDisappear(chatId, hours, {
+          ? (secRaw as DisappearHours)
+          : hoursRaw === 1
+            ? 3600
+            : hoursRaw === 24
+              ? 86400
+              : hoursRaw === 6
+                ? 21600
+                : hoursRaw === 12
+                  ? 43200
+                  : 0;
+        setDisappear(chatId, sec as DisappearHours, {
           text: detail.chat?.disappearText !== false,
           image: detail.chat?.disappearImage !== false,
           audio: detail.chat?.disappearAudio !== false,
@@ -514,12 +523,25 @@ export function ChatScreen(): JSX.Element {
   );
 
   const applyDisappear = useCallback(
-    (hours: DisappearHours, types?: { text: boolean; image: boolean; audio: boolean }) => {
+    (
+      seconds: DisappearHours,
+      types?: { text: boolean; image: boolean; audio: boolean },
+    ) => {
       const nextTypes = types ?? disappearTypes;
-      setDisappear(chatId, hours, nextTypes);
+      const sec =
+        seconds === 1
+          ? 3600
+          : seconds === 6
+            ? 21600
+            : seconds === 12
+              ? 43200
+              : seconds === 24
+                ? 86400
+                : seconds;
+      setDisappear(chatId, sec as DisappearHours, nextTypes);
       void chatsApi
         .setDisappear(chatId, {
-          hours,
+          seconds: sec as 0 | 30 | 3600 | 86400 | 604800,
           text: nextTypes.text,
           image: nextTypes.image,
           audio: nextTypes.audio,
@@ -556,7 +578,19 @@ export function ChatScreen(): JSX.Element {
                   }`,
               muted ? 'Silenciado' : '',
               disappearHours
-                ? `Autodestruye: ${disappearHours}h`
+                ? `Autodestruye: ${
+                    disappearHours === 30
+                      ? '30 s'
+                      : disappearHours === 3600
+                        ? '1 h'
+                        : disappearHours === 86400
+                          ? '1 día'
+                          : disappearHours === 604800
+                            ? '1 sem'
+                            : disappearHours < 100
+                              ? `${disappearHours}h`
+                              : `${disappearHours}s`
+                  }`
                 : '',
             ]
               .filter(Boolean)
@@ -756,10 +790,20 @@ export function ChatScreen(): JSX.Element {
                 text: 'Desactivado',
                 onPress: () => applyDisappear(0),
               },
-              { text: 'Cada 1 hora', onPress: () => pickTypes(1) },
-              { text: 'Cada 6 horas', onPress: () => pickTypes(6) },
-              { text: 'Cada 12 horas', onPress: () => pickTypes(12) },
-              { text: 'Cada 24 horas', onPress: () => pickTypes(24) },
+              { text: '30 segundos', onPress: () => pickTypes(30) },
+              { text: '1 hora', onPress: () => pickTypes(3600) },
+              {
+                text: 'Más…',
+                onPress: () => {
+                  setTimeout(() => {
+                    Alert.alert('Plazo', undefined, [
+                      { text: '1 día', onPress: () => pickTypes(86400) },
+                      { text: '1 semana', onPress: () => pickTypes(604800) },
+                      { text: 'Cancelar', style: 'cancel' },
+                    ]);
+                  }, 320);
+                },
+              },
               { text: 'Cancelar', style: 'cancel' },
             ],
           );
