@@ -39,7 +39,8 @@ import {
 import { UserAvatar } from '../components/UserAvatar';
 import type { FeatherIconName } from '../types/iconNames';
 import type { BillingPlanInfo } from '../types';
-import { ensureE2eBundle, replenishPreKeysIfNeeded } from '../crypto/e2eKeys';
+import { ensureSignalBundle } from '../crypto/signalSession';
+import { LEGACY_PQ_RATCHET_DISABLED_FOR_NEW } from '../crypto/legacyPqFlags';
 import { publishKtlIfNeeded } from '../crypto/ktlPublish';
 import { hydrateGlossary } from '../i18n/glossaryCache';
 import { securityApi } from '../api/security';
@@ -247,8 +248,8 @@ export function SettingsScreen(): JSX.Element {
 
   const handleRegisterE2e = useCallback(() => {
     Alert.alert(
-      'Cifrado E2E',
-      'Registra la clave pública de este dispositivo (X25519 + ML-KEM768). Privadas en SecureStore. Protocolo: Synap-pq-v1. En cada chat: ⋮ → Privacidad del chat.',
+      'Cifrado Privado (Signal)',
+      'Registra claves públicas Signal (libsignal). Las privadas quedan en este teléfono. El ratchet propio synapmsg-pq-v1 está apagado para chats nuevos.',
       [
         { text: 'Cancelar', style: 'cancel' },
         {
@@ -257,22 +258,26 @@ export function SettingsScreen(): JSX.Element {
             void (async () => {
               setE2eBusy(true);
               try {
-                let bundle = await ensureE2eBundle();
-                await usersApi.registerE2eDevice(bundle);
+                const bundle = await ensureSignalBundle();
+                await usersApi.registerE2eDevice({
+                  deviceId: bundle.deviceId,
+                  identityKeyPub: bundle.identityKeyPub,
+                  signedPreKeyPub: bundle.signedPreKeyPub,
+                  signedPreKeyId: bundle.signedPreKeyId,
+                  signedPreKeySig: bundle.signedPreKeySig,
+                  registrationId: bundle.registrationId,
+                  preKeys: bundle.preKeys,
+                  protocol: bundle.protocol,
+                });
                 const devices = await usersApi.listE2eDevices();
-                const mine = devices.find((d) => d.deviceId === bundle.deviceId);
-                const replenished = await replenishPreKeysIfNeeded(
-                  mine?.preKeyCount ?? bundle.preKeys.length,
-                );
-                if (replenished) {
-                  await usersApi.registerE2eDevice(replenished);
-                  bundle = replenished;
-                }
                 const ktl = await publishKtlIfNeeded();
                 setE2eDeviceCount(devices.length);
                 Alert.alert(
                   'Listo',
-                  `Dispositivo ${bundle.deviceId} registrado (${bundle.preKeys.length} prekeys).` +
+                  `Dispositivo ${bundle.deviceId} (libsignal, ${bundle.preKeys.length} prekeys).` +
+                    (LEGACY_PQ_RATCHET_DISABLED_FOR_NEW
+                      ? ' Legacy PQ apagado para chats nuevos.'
+                      : '') +
                     (ktl.published
                       ? ` KTL #${ktl.seq}.`
                       : ktl.seq
@@ -280,7 +285,7 @@ export function SettingsScreen(): JSX.Element {
                         : ''),
                 );
               } catch {
-                Alert.alert('Error', 'No se pudo registrar el dispositivo E2E.');
+                Alert.alert('Error', 'No se pudo registrar el dispositivo Signal.');
               } finally {
                 setE2eBusy(false);
               }
@@ -815,8 +820,8 @@ export function SettingsScreen(): JSX.Element {
                     `Enclave nativo: ${r.native ? 'sí' : 'no'}`,
                     `StrongBox/SE: ${r.strongBox ? 'sí' : 'no'}`,
                     `SQLCipher NDK: ${sql.native ? sql.engine + ' ' + sql.version : 'fallback file'}`,
-                    `libsignal JNI: ${sig.native ? sig.implementation + ' ' + sig.version : 'TS only'}`,
-                    `Wire: synapmsg-pq-v1`,
+                    `libsignal JNI: ${sig.native ? sig.implementation + ' ' + sig.version : 'TS protocol'}`,
+                    `Wire nuevo: libsignal (legacy PQ apagado)`,
                     `File fallback: ${SQLCIPHER_STATUS.engine}`,
                     `Razones: ${r.reasons.join(', ') || 'ninguna'}`,
                   ].join('\n'),

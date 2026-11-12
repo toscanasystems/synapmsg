@@ -55,7 +55,11 @@ import { Loading } from '../components/Loading';
 import { ChatHeaderMenu, ChatMenuAction } from '../components/ChatHeaderMenu';
 import { AttachAction } from '../components/AttachSheet';
 import { ApiError } from '../api/client';
-import { getLocalIdentityPub, safetyNumber } from '../crypto/e2eKeys';
+import {
+  getSignalIdentityPub,
+  signalSafetyNumber,
+  safetyQrPayload,
+} from '../crypto/signalSession';
 import { consumeKeyChanged, getPeerIdentityPub } from '../crypto/peerCache';
 
 export function ChatScreen(): JSX.Element {
@@ -593,23 +597,32 @@ export function ChatScreen(): JSX.Element {
         case 'safety':
           void (async () => {
             try {
-              const mine = await getLocalIdentityPub();
-              if (!mine || !otherUserId) {
+              const mine = await getSignalIdentityPub();
+              if (!mine || !otherUserId || !me?.id) {
                 Alert.alert(
                   'Código de seguridad',
-                  'Registra E2E en Ajustes y asegúrate de que el contacto también lo tenga.',
+                  'Registra el dispositivo Signal en Ajustes y asegurate de que el contacto también lo tenga.',
                 );
                 return;
               }
               const theirs = await getPeerIdentityPub(otherUserId);
-              const code = await safetyNumber(mine, theirs);
-              Alert.alert('Código de seguridad', code);
+              const code = await signalSafetyNumber(
+                me.id,
+                mine,
+                otherUserId,
+                theirs,
+              );
+              const qr = safetyQrPayload(code);
+              Alert.alert(
+                'Código de seguridad',
+                `${code}\n\nQR (ambos deben ver el mismo):\n${qr}`,
+              );
             } catch (err) {
               Alert.alert(
                 'Código de seguridad',
                 err instanceof ApiError
                   ? err.message
-                  : 'El contacto aún no registró un dispositivo E2E.',
+                  : 'El contacto aún no registró un dispositivo Signal.',
               );
             }
           })();

@@ -183,6 +183,7 @@ export const usersApi = {
     identityKeyPub: string;
     signedPreKeyPub: string;
     signedPreKeyId: number;
+    signedPreKeySig?: string;
     registrationId: number;
     preKeys: Array<{ keyId: number; publicKey: string }>;
     pqKemPub?: string;
@@ -193,11 +194,12 @@ export const usersApi = {
       {
         identityKeyPub: bundle.identityKeyPub,
         signedPreKeyPub: bundle.signedPreKeyPub,
+        signedPreKeySig: bundle.signedPreKeySig,
         signedPreKeyId: bundle.signedPreKeyId,
         registrationId: bundle.registrationId,
         preKeys: bundle.preKeys,
         pqKemPub: bundle.pqKemPub,
-        protocol: bundle.protocol,
+        protocol: bundle.protocol ?? 'libsignal',
       },
     );
     return data;

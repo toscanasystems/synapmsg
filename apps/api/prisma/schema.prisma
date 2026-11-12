@@ -106,9 +106,13 @@ model DeviceIdentity {
   identityKeyPub  String
   signedPreKeyPub String
   signedPreKeyId  Int      @default(1)
+  /// Signature of signedPreKeyPub by identity key (Signal Protocol)
+  signedPreKeySig String   @default("")
   preKeysJson     String   @default("[]") // JSON array of { keyId, publicKey }
   registrationId  Int
-  // ML-KEM768 public key (base64) for hybrid PQ handshake
+  /// libsignal (default) | synapmsg-pq-v1 (legacy, receive-only on clients)
+  protocol        String   @default("libsignal")
+  // ML-KEM768 public key (base64) — unused for new libsignal sessions
   pqKemPub        String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

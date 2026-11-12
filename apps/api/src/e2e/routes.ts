@@ -37,6 +37,7 @@ router.put(
       const body = (req.body ?? {}) as {
         identityKeyPub?: unknown;
         signedPreKeyPub?: unknown;
+        signedPreKeySig?: unknown;
         signedPreKeyId?: unknown;
         registrationId?: unknown;
         preKeys?: unknown;
@@ -65,6 +66,12 @@ router.put(
         typeof body.pqKemPub === 'string' && body.pqKemPub.trim()
           ? body.pqKemPub.trim()
           : null;
+      const signedPreKeySig =
+        typeof body.signedPreKeySig === 'string' ? body.signedPreKeySig.trim() : '';
+      const protocol =
+        typeof body.protocol === 'string' && body.protocol.trim()
+          ? body.protocol.trim().slice(0, 32)
+          : 'libsignal';
 
       const row = await prisma.deviceIdentity.upsert({
         where: {
@@ -75,18 +82,22 @@ router.put(
           deviceId,
           identityKeyPub: body.identityKeyPub.trim(),
           signedPreKeyPub: body.signedPreKeyPub.trim(),
+          signedPreKeySig,
           signedPreKeyId,
           registrationId,
           preKeysJson: JSON.stringify(preKeys),
           pqKemPub,
+          protocol,
         },
         update: {
           identityKeyPub: body.identityKeyPub.trim(),
           signedPreKeyPub: body.signedPreKeyPub.trim(),
+          signedPreKeySig,
           signedPreKeyId,
           registrationId,
           preKeysJson: JSON.stringify(preKeys),
           pqKemPub,
+          protocol,
         },
       });
 
@@ -96,14 +107,19 @@ router.put(
           deviceId: row.deviceId,
           identityKeyPub: row.identityKeyPub,
           signedPreKeyPub: row.signedPreKeyPub,
+          signedPreKeySig: row.signedPreKeySig,
           signedPreKeyId: row.signedPreKeyId,
           registrationId: row.registrationId,
           pqKemPub: row.pqKemPub,
           preKeyCount: preKeys.length,
+          protocol: row.protocol,
           updatedAt: row.updatedAt.toISOString(),
         },
-        protocol: 'synapmsg-pq-v1',
-        note: 'X3DH + Double Ratchet + ML-KEM768 hybrid',
+        protocol: row.protocol,
+        note:
+          row.protocol === 'libsignal'
+            ? 'Signal Protocol (libsignal). Server stores public keys only.'
+            : 'Legacy protocol flagged; clients should prefer libsignal for new chats.',
       });
     } catch (err) {
       next(err);
@@ -184,10 +200,11 @@ router.get(
         signedPreKey: {
           keyId: row.signedPreKeyId,
           publicKey: row.signedPreKeyPub,
+          signature: row.signedPreKeySig || undefined,
         },
         oneTimePreKey: oneTime,
         pqKemPub: row.pqKemPub,
-        protocol: 'synapmsg-pq-v1',
+        protocol: row.protocol || 'libsignal',
         pqHybrid: Boolean(row.pqKemPub),
         keyChanged,
         ktlSeq: lastKtl?.seq ?? null,
@@ -242,7 +259,7 @@ router.patch(
         encryptionMode: chat.encryptionMode,
         note:
           mode === 'e2e'
-            ? 'Modo E2E: el servidor solo acepta ciphertext (scaffold-x25519-v1)'
+            ? 'Modo Privado: el servidor solo acepta ciphertext (libsignal)'
             : 'Modo nube (traducción cloud + almacenamiento servidor)',
       });
     } catch (err) {

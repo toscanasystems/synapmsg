@@ -1,7 +1,9 @@
 /**
- * Double Ratchet (Signal-style) for Synapmsg — pure TS.
+ * LEGACY Double Ratchet — DISABLED FOR NEW CHATS (Fase 2).
+ * New Private encrypts use libsignal (signalSession.ts).
+ * Kept only so old synapmsg-pq-v1 envelopes can still be opened (receive-only).
+ *
  * X25519 DH ratchet + symmetric chain (HKDF-SHA256) + secretbox.
- * Wire header carries DH public + PN/N counters.
  */
 
 import nacl from 'tweetnacl';

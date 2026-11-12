@@ -3,6 +3,37 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-12 — Fase 2 (Signal / libsignal)
+
+### Demostrado
+
+1. **Chats Privados 1:1 con Signal Protocol (libsignal), no con el ratchet propio**
+   - Paquete `@synapmsg/crypto`: X3DH + Double Ratchet vía
+     `@privacyresearch/libsignal-protocol-typescript`.
+   - Prueba dispositivos: `cd packages/crypto && npm run test:signal` → `ok:true`.
+   - Prueba dos cuentas en Neon: `cd packages/crypto && npm run prove:two-accounts`
+     (o `cd apps/api && npm run prove:signal`). Resultado 2026-11-12 `ok:true`:
+     - dos usuarios + `DeviceIdentity` con solo material público (`protocol=libsignal`);
+     - mensaje Alice→Bob: `originalText=""`, `translatedText=null`, solo `ciphertext`;
+     - `SELECT * FROM messages` no contiene el plaintext de control;
+     - Bob abre el mensaje con claves privadas locales;
+     - código de seguridad + payload QR `synapmsg:safety:…`;
+     - `LEGACY_PQ_RATCHET_DISABLED_FOR_NEW=true` (synapmsg-pq-v1 apagado para chats nuevos).
+   - El servidor no cifra ni descifra: reparte bundles públicos y guarda el sobre opaco.
+
+2. **Claves privadas solo en el dispositivo**
+   - Mobile: `signalStore` / `signalSession` — privadas en SecureStore local.
+   - API: rutas E2E / `DeviceIdentity` aceptan solo pubs + firma de signed prekey.
+
+3. **Código de seguridad + QR**
+   - `signalSafetyNumber` + `safetyQrPayload` en crypto; UI en chat/settings móvil.
+
+### Todavía no (Fase 2)
+
+- Grupos E2E con libsignal.
+- libsignal JNI nativo obligatorio (hoy TS protocol; JNI opcional si está linkeado).
+- Verificación QR escaneada punta a punta en APK de release (payload demostrado en Node).
+
 ## 2026-11-12 — Fase 1
 
 ### Demostrado
@@ -30,11 +61,10 @@ Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
 ### Todavía no (no afirmar en marketing)
 
-- Protocolo Signal / libsignal real (hoy hay un ratchet propio; Fase 2).
 - Traducción on-device en chats Privados con prueba (Fase 3).
 - “100+ idiomas”.
 - Wipe remoto, PIN de coacción, FIDO2, KTL, Dead Man’s Switch, StrongBox
-  como paquete demostrado de punta a punta (Fases 4–5).
+  como paquete demostrado de punta a punta (Fases 2.1–2.6 / 4–5).
 - Llamadas, grupos, canales, archivos grandes como promesas cerradas (Fase 6).
 - PDF comparativo regenerado sin promesas sin prueba (el PDF binario puede
   quedar desactualizado hasta regenerarlo; la verdad está aquí).
