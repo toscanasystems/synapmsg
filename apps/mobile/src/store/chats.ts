@@ -30,7 +30,13 @@ import { Chat, ChatEncryptionMode, Message } from '../types';
 import {
   decryptMessageFromPeer,
   encryptMessageForPeer,
+  IdentityKeyChangedError,
 } from '../crypto/e2eSession';
+import {
+  hasUserTrustedPeer,
+  promptIdentityTrust,
+} from '../crypto/identityTrust';
+import { getLocalSignalDeviceId } from '../crypto/signalSession';
 import { applyPrivateOnDeviceMt } from '../i18n/privateOnDeviceMt';
 
 interface ChatsState {
@@ -78,9 +84,27 @@ interface ChatsState {
   reset: () => void;
 }
 
+function peerIdForChat(chat: Chat | undefined, meId: string): string | null {
+  if (!chat) return null;
+  const other = chat.participants.find((p) => p.userId !== meId);
+  return other?.userId ?? null;
+}
+
+function peerLabelForChat(chat: Chat | undefined, meId: string): string {
+  if (!chat) return 'contacto';
+  const other = chat.participants.find((p) => p.userId !== meId);
+  return (
+    other?.user?.privateNumberFormatted ||
+    other?.user?.username ||
+    other?.user?.name ||
+    'contacto'
+  );
+}
+
 async function maybeDecryptMessage(
   message: Message,
   peerUserId: string | null,
+  chatId?: string,
 ): Promise<Message> {
   let next = message;
   if (message.isE2e && message.ciphertext && peerUserId) {
@@ -94,17 +118,73 @@ async function maybeDecryptMessage(
         isTranslated: false,
       };
     } else {
-      const plain = await decryptMessageFromPeer(
-        peerUserId,
-        message.ciphertext,
-      );
-      if (plain) {
-        next = {
-          ...message,
-          originalText: plain,
-          translatedText: plain,
-          isTranslated: false,
-        };
+      try {
+        const plain = await decryptMessageFromPeer(
+          peerUserId,
+          message.ciphertext,
+        );
+        if (plain) {
+          next = {
+            ...message,
+            originalText: plain,
+            translatedText: plain,
+            isTranslated: false,
+          };
+        } else if (
+          !message.originalText ||
+          message.originalText.startsWith('🔒')
+        ) {
+          console.warn(
+            '[signal] decrypt returned null for message',
+            message.id,
+            'peer',
+            peerUserId,
+          );
+          next = {
+            ...message,
+            originalText: '🔒 No se pudo descifrar (sesión Signal)',
+            translatedText: '🔒 No se pudo descifrar (sesión Signal)',
+            isTranslated: false,
+          };
+        }
+      } catch (err) {
+        if (err instanceof IdentityKeyChangedError) {
+          const chat = useChatsStore
+            .getState()
+            .chats.find((c) => c.id === (chatId || message.chatId));
+          const me = useAuthStore.getState().user;
+          const label = peerLabelForChat(chat, me?.id || '');
+          if (!hasUserTrustedPeer(err.peerUserId)) {
+            void getLocalSignalDeviceId().then((deviceId) => {
+              promptIdentityTrust({
+                peerUserId: err.peerUserId,
+                peerLabel: label,
+                newIdentityKeyB64: err.newIdentityKeyB64,
+                deviceId,
+                onTrusted: () => {
+                  const cid = chatId || message.chatId;
+                  if (cid) void useChatsStore.getState().fetchMessages(cid);
+                },
+              });
+            });
+          }
+          next = {
+            ...message,
+            originalText: '🔒 La llave de seguridad cambió',
+            translatedText: '🔒 La llave de seguridad cambió',
+            isTranslated: false,
+          };
+        } else if (
+          !message.originalText ||
+          message.originalText.startsWith('🔒')
+        ) {
+          next = {
+            ...message,
+            originalText: '🔒 No se pudo descifrar (sesión Signal)',
+            translatedText: '🔒 No se pudo descifrar (sesión Signal)',
+            isTranslated: false,
+          };
+        }
       }
     }
   }
@@ -116,12 +196,6 @@ async function maybeDecryptMessage(
     me?.preferredLanguage || 'es',
     me?.id,
   );
-}
-
-function peerIdForChat(chat: Chat | undefined, meId: string): string | null {
-  if (!chat) return null;
-  const other = chat.participants.find((p) => p.userId !== meId);
-  return other?.userId ?? null;
 }
 
 // Optimistic messages get a synthetic id prefix so they can be reconciled
@@ -162,7 +236,7 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
       const decrypted = await Promise.all(
         messages.map(async (m) => {
           const fromPeer = m.senderId === me?.id ? peerId : m.senderId;
-          return maybeDecryptMessage(m, fromPeer);
+          return maybeDecryptMessage(m, fromPeer, chatId);
         }),
       );
       set((state) => ({
@@ -201,6 +275,21 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
         ciphertext = enc.ciphertext;
         ciphertextType = enc.ciphertextType;
       } catch (err) {
+        if (err instanceof IdentityKeyChangedError) {
+          const label = peerLabelForChat(chat, me.id);
+          const deviceId = await getLocalSignalDeviceId();
+          set({ error: 'Identity key changed' });
+          promptIdentityTrust({
+            peerUserId: err.peerUserId,
+            peerLabel: label,
+            newIdentityKeyB64: err.newIdentityKeyB64,
+            deviceId,
+            onTrusted: () => {
+              void get().sendMessage(chatId, text, media);
+            },
+          });
+          return;
+        }
         const msg =
           err instanceof Error
             ? err.message
@@ -326,7 +415,7 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
     const fromPeer = message.senderId === me?.id ? peerId : message.senderId;
 
     void (async () => {
-      const decoded = await maybeDecryptMessage(message, fromPeer);
+      const decoded = await maybeDecryptMessage(message, fromPeer, chatId);
       const isMine = me?.id === decoded.senderId;
 
       set((state) => {
@@ -342,14 +431,35 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
         let messagesByChat: typeof state.messagesByChat;
         if (exists) {
           const next = list.map((m) => {
-            if (m.id === decoded.id) return decoded;
+            const keepOwnPlain = (
+              local: Message,
+              incoming: Message,
+            ): Message => {
+              if (
+                isMine &&
+                incoming.isE2e &&
+                (!incoming.originalText ||
+                  incoming.originalText.startsWith('🔒')) &&
+                local.originalText &&
+                !local.originalText.startsWith('🔒')
+              ) {
+                return {
+                  ...incoming,
+                  originalText: local.originalText,
+                  translatedText: local.translatedText || local.originalText,
+                };
+              }
+              return incoming;
+            };
+            if (m.id === decoded.id) return keepOwnPlain(m, decoded);
             if (
               m.id.startsWith(OPTIMISTIC_PREFIX) &&
               m.senderId === decoded.senderId &&
               (m.originalText === decoded.originalText ||
                 (Boolean(m.isE2e) && Boolean(decoded.isE2e)))
             ) {
-              return decoded;
+              // Own Private echo has ciphertext only — keep local plaintext.
+              return keepOwnPlain(m, decoded);
             }
             return m;
           });
@@ -362,7 +472,7 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
         }
 
         const previewText = decoded.isE2e
-          ? decoded.originalText.startsWith('🔒')
+          ? !decoded.originalText || decoded.originalText.startsWith('🔒')
             ? '🔒 Mensaje cifrado'
             : decoded.originalText
           : isMine
@@ -397,6 +507,16 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
   startChat: async (userId) => {
     try {
       const chat = await chatsApi.createOrReuse({ participantId: userId });
+      // Download + persist peer Signal public bundle before first Private send.
+      try {
+        const { ensurePeerSession } = await import('../crypto/signalSession');
+        await ensurePeerSession(userId);
+      } catch (bundleErr) {
+        console.warn(
+          '[signal] ensurePeerSession on startChat failed',
+          bundleErr instanceof Error ? bundleErr.message : bundleErr,
+        );
+      }
       // Insert if not already present.
       set((state) => {
         if (state.chats.some((c) => c.id === chat.id)) return state;

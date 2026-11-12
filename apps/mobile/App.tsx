@@ -48,7 +48,7 @@ import { CallScreen } from './src/screens/CallScreen';
 import { registerPushToken } from './src/notifications/push';
 import { setupNotificationHandlers } from './src/notifications/setup';
 import { usersApi } from './src/api/messages';
-import { ensureE2eBundle, replenishPreKeysIfNeeded } from './src/crypto/e2eKeys';
+import { ensureSignalBundle } from './src/crypto/signalSession';
 import { publishKtlIfNeeded } from './src/crypto/ktlPublish';
 import { hydrateGlossary } from './src/i18n/glossaryCache';
 import { wipeLocalSecrets } from './src/security/localWipe';
@@ -339,31 +339,27 @@ export default function App(): JSX.Element {
       void fetchChats();
       void registerPushToken();
       void hydrateGlossary(true);
-      // Fase 1: auto-register E2E, replenish OTKs, publish KTL if needed.
+      // Auto-register Signal (libsignal) public bundle — private keys stay on device.
       void (async () => {
         try {
-          let bundle = await ensureE2eBundle();
-          await usersApi.registerE2eDevice(bundle);
-          try {
-            const devices = await usersApi.listE2eDevices();
-            const mine = devices.find((d) => d.deviceId === bundle.deviceId);
-            const replenished = await replenishPreKeysIfNeeded(
-              mine?.preKeyCount ?? 0,
-            );
-            if (replenished) {
-              await usersApi.registerE2eDevice(replenished);
-              bundle = replenished;
-            }
-          } catch {
-            /* prekey refresh non-fatal */
-          }
+          const bundle = await ensureSignalBundle();
+          await usersApi.registerE2eDevice({
+            deviceId: bundle.deviceId,
+            identityKeyPub: bundle.identityKeyPub,
+            signedPreKeyPub: bundle.signedPreKeyPub,
+            signedPreKeyId: bundle.signedPreKeyId,
+            signedPreKeySig: bundle.signedPreKeySig,
+            registrationId: bundle.registrationId,
+            preKeys: bundle.preKeys,
+            protocol: bundle.protocol,
+          });
           await publishKtlIfNeeded();
         } catch {
-          /* non-fatal — user can retry from Settings */
+          /* non-fatal — user can retry from Settings → Dispositivo E2E */
         }
       })();
     }
-  }, [token, fetchChats]);
+  }, [token]);
 
   useEffect(() => {
     if (!token) return;

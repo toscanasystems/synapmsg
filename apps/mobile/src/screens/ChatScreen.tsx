@@ -200,6 +200,15 @@ export function ChatScreen(): JSX.Element {
     if (!otherUserId) return;
     void (async () => {
       try {
+        const { ensurePeerSession } = await import('../crypto/signalSession');
+        await ensurePeerSession(otherUserId);
+      } catch (err) {
+        console.warn(
+          '[signal] ensurePeerSession on chat open failed',
+          err instanceof Error ? err.message : err,
+        );
+      }
+      try {
         await getPeerIdentityPub(otherUserId);
         if (consumeKeyChanged(otherUserId)) {
           Alert.alert(

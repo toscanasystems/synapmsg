@@ -4,6 +4,7 @@
  */
 
 import * as SecureStore from 'expo-secure-store';
+import * as ExpoCrypto from 'expo-crypto';
 import nacl from 'tweetnacl';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -12,6 +13,16 @@ const INDEX_KEY = 'synapmsg_vault_index';
 const SECURE_OPTS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
 };
+
+// tweetnacl needs an explicit PRNG on this RN/Hermes build (no crypto.getRandomValues).
+try {
+  nacl.setPRNG((x: Uint8Array, n: number) => {
+    const rnd = ExpoCrypto.getRandomBytes(n);
+    for (let i = 0; i < n; i++) x[i] = rnd[i]!;
+  });
+} catch (err) {
+  console.warn('[secureVault] nacl.setPRNG failed', err);
+}
 
 function b64(bytes: Uint8Array): string {
   let s = '';
@@ -108,9 +119,12 @@ export async function setAuthSession(
     await vaultSet('auth_token', token);
     await vaultSet('auth_user', userJson);
   } catch (err) {
-    // Some Android builds reject large SecureStore writes — never block login.
-    // eslint-disable-next-line no-console
-    console.warn('[secureVault] vaultSet failed, using AsyncStorage', err);
+    // Never block login — but make the fallback loud in logs.
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(
+      '[secureVault] vaultSet failed → fell back to plain AsyncStorage (not Keystore). reason=',
+      msg,
+    );
     await AsyncStorage.setItem('@synapmsg/token', token);
   }
   await AsyncStorage.setItem('@synapmsg/user', userJson);

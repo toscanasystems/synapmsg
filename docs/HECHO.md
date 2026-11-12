@@ -19,13 +19,12 @@ release sin Metro. Prueba `synapmsg://prove/phase4` → `ok:true` (UTC-6 2026-11
 3. **Borrado remoto de otro aparato** — se registró un segundo `deviceId`, se emitió wipe firmado; el peer WS recibió `remote_wipe`; el otro deviceId desapareció (`otherDeviceRemoved: true`) y el emisor se mantuvo (`issuerKept: true`).
 4. **PIN de coacción** — `duressUnlock: "duress"`; entra a cuenta señuelo distinta (`decoyIsNotReal: true`) y vacía (`decoyEmpty: true`, `decoyChatCount: 0`).
 
-### No demostrado en esta prueba
+### Demostrado — dos teléfonos (2026-11-12, APK versionCode 75)
 
-- **FALTA SEGUNDO TELÉFONO** — no hay mensaje Privado 1:1 entre dos teléfonos reales ni opacidad del plaintext en la base para ese envío.
+Privado 1:1 Toscana SM-A356E (`RFCX41A9NQL`) ↔ Samsung SM-A566E (`R5CYA03YERH`): ida, vuelta, acentos/emoji y recepción con app cerrada; plaintext ausente en Neon (`originalText`/`translatedText` vacíos, solo ciphertext libsignal).
 
 ### Todavía no (no afirmar en marketing)
 
-- Mensaje Privado leído en un segundo teléfono físico + ilegible en la DB (falta el segundo aparato).
 - FIDO2 / llaves físicas, KTL, Dead Man’s Switch, StrongBox como paquete cerrado.
 - Grupos E2E con libsignal; verificación QR escaneada en APK de release.
 - Llamadas, canales, archivos grandes como promesas cerradas.

@@ -10,8 +10,13 @@ import nacl from 'tweetnacl';
 import { hkdf } from '@noble/hashes/hkdf';
 import { sha256 } from '@noble/hashes/sha256';
 import * as Crypto from 'expo-crypto';
+import { utf8ToBytes } from './utf8Bytes';
 
 const MAX_SKIP = 200;
+
+function utf8Label(s: string): Uint8Array {
+  return utf8ToBytes(s);
+}
 
 export type RatchetHeader = {
   dhPub: string; // b64
@@ -72,12 +77,12 @@ function toUtf8(text: string): Uint8Array {
 }
 
 function kdfRk(rk: Uint8Array, dhOut: Uint8Array): { root: Uint8Array; chain: Uint8Array } {
-  const out = hkdf(sha256, dhOut, rk, new TextEncoder().encode('SynapmsgDR'), 64);
+  const out = hkdf(sha256, dhOut, rk, utf8Label('SynapmsgDR'), 64);
   return { root: out.slice(0, 32), chain: out.slice(32, 64) };
 }
 
 function kdfCk(ck: Uint8Array): { chain: Uint8Array; msg: Uint8Array } {
-  const out = hkdf(sha256, new Uint8Array([0x01]), ck, new TextEncoder().encode('SynapmsgCK'), 64);
+  const out = hkdf(sha256, new Uint8Array([0x01]), ck, utf8Label('SynapmsgCK'), 64);
   return { chain: out.slice(0, 32), msg: out.slice(32, 64) };
 }
 
@@ -234,7 +239,7 @@ export function x3dhSharedSecret(parts: Uint8Array[]): Uint8Array {
     concat.set(p, o);
     o += p.length;
   }
-  return hkdf(sha256, concat, undefined, new TextEncoder().encode('SynapmsgX3DH'), 32);
+  return hkdf(sha256, concat, undefined, utf8Label('SynapmsgX3DH'), 32);
 }
 
 export { b64, unb64 };

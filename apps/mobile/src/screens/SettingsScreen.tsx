@@ -67,6 +67,10 @@ import {
   mlkitIsModelDownloaded,
 } from 'synap-mlkit-translate';
 import { PRIVATE_GLOSSARY_MAX } from '../i18n/privateOnDeviceMt';
+import {
+  loadIdentityChangeLog,
+  type IdentityChangeLogEntry,
+} from '../crypto/identityTrust';
 
 const NOTIF_KEY = '@Synap/notifications_enabled';
 const READ_KEY = '@Synap/read_receipts';
@@ -169,6 +173,9 @@ export function SettingsScreen(): JSX.Element {
   const [deviceRisk, setDeviceRisk] = useState<DeviceRisk | null>(null);
   const [vpnOn, setVpnOn] = useState(false);
   const [whisperReady, setWhisperReady] = useState(false);
+  const [identityLog, setIdentityLog] = useState<IdentityChangeLogEntry[]>(
+    [],
+  );
 
   const lockEnabled = useAppLockStore((s) => s.enabled);
   const bioEnabled = useAppLockStore((s) => s.bioEnabled);
@@ -188,6 +195,7 @@ export function SettingsScreen(): JSX.Element {
     void assessDeviceRiskAsync().then(setDeviceRisk);
     void isVpnPreferred().then(setVpnOn);
     void getWhisperStatus().then((s) => setWhisperReady(s.modelReady));
+    void loadIdentityChangeLog().then(setIdentityLog);
   }, [hasHardwareBiometrics, hydrateSmart]);
 
   useEffect(() => {
@@ -1009,6 +1017,37 @@ export function SettingsScreen(): JSX.Element {
                   : 'Registrar claves públicas'
             }
             onPress={e2eBusy ? undefined : handleRegisterE2e}
+          />
+          <SettingsRow
+            icon="shield"
+            iconBg="#FF9500"
+            title="Cambios de llave"
+            subtitle={
+              identityLog.length === 0
+                ? 'Sin cambios registrados'
+                : `${identityLog.length} registro(s) · último: ${identityLog[0]?.peerLabel ?? ''}`
+            }
+            onPress={() => {
+              void loadIdentityChangeLog().then((entries) => {
+                setIdentityLog(entries);
+                if (entries.length === 0) {
+                  Alert.alert(
+                    'Cambios de llave',
+                    'Todavía no hay cambios de identidad registrados.',
+                  );
+                  return;
+                }
+                const body = entries
+                  .slice(0, 12)
+                  .map((e) => {
+                    const when = new Date(e.at).toLocaleString();
+                    const decision = e.trusted ? 'Confío' : 'No enviar';
+                    return `${when}\n${e.peerLabel} · ${decision}\nllave ${e.newKeyPrefix}…`;
+                  })
+                  .join('\n\n');
+                Alert.alert('Cambios de llave', body);
+              });
+            }}
           />
           {lockEnabled ? (
             <SettingsRow

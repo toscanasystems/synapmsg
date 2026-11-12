@@ -163,10 +163,16 @@ router.get(
         res.status(400).json({ error: 'userId required' });
         return;
       }
-      const row = await prisma.deviceIdentity.findFirst({
-        where: { userId },
-        orderBy: { updatedAt: 'desc' },
-      });
+      // Prefer libsignal over legacy synapmsg-pq-v1 when both exist.
+      const row =
+        (await prisma.deviceIdentity.findFirst({
+          where: { userId, protocol: 'libsignal' },
+          orderBy: { updatedAt: 'desc' },
+        })) ||
+        (await prisma.deviceIdentity.findFirst({
+          where: { userId },
+          orderBy: { updatedAt: 'desc' },
+        }));
       if (!row) {
         res.status(404).json({
           error: 'No E2E device registered',

@@ -91,9 +91,11 @@ export function mayDecryptE2e(): { ok: boolean; reason?: string } {
       r !== 'native_module_missing' &&
       r !== 'enclave_probe_failed',
   );
-  // Hard deny: root / frida / emulator / expo go
+  // Hard deny: root / frida / emulator / expo go.
+  // Note: "debugger" alone is NOT hard-denied — USB adb debugging on real
+  // phones would otherwise block reading Private chats during QA.
   const hard = blocking.filter((r) =>
-    ['root', 'frida', 'emulator', 'expo_go', 'debugger', 'su_binary', 'frida_maps'].some(
+    ['root', 'frida', 'emulator', 'expo_go', 'su_binary', 'frida_maps'].some(
       (h) => r === h || r.startsWith('frida_port'),
     ),
   );

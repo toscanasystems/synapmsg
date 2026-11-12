@@ -14,9 +14,11 @@ import {
   signalEncryptForPeer,
   SIGNAL_PROTOCOL,
 } from './signalSession';
+import { IdentityKeyChangedError } from './identityTrust';
 
 // Re-export flag for Settings / diagnostics
 export { LEGACY_PQ_RATCHET_DISABLED_FOR_NEW, LEGACY_PQ_PROTOCOL };
+export { IdentityKeyChangedError };
 
 export async function encryptMessageForPeer(
   peerUserId: string,
@@ -32,7 +34,7 @@ export async function decryptMessageFromPeer(
   peerUserId: string,
   ciphertextB64: string,
 ): Promise<string | null> {
-  // Prefer Signal
+  // Prefer Signal (may throw IdentityKeyChangedError — never auto-trust)
   const signalPlain = await signalDecryptFromPeer(peerUserId, ciphertextB64);
   if (signalPlain != null) return signalPlain;
 
