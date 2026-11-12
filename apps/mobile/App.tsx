@@ -254,11 +254,11 @@ export default function App(): JSX.Element {
       if (msg.type === 'dms_triggered') {
         // Wipe must arrive as signed remote_wipe (dmsScheduler). Never wipe unsigned.
         Alert.alert(
-          'Dead Man Switch',
+          'Aviso de inactividad',
           msg.message ||
             (msg.ciphertext
               ? 'Acción cifrada disparada (payload en ciphertext).'
-              : `Acción DMS: ${msg.action || 'notify'}`),
+              : `Acción: ${msg.action || 'notify'}`),
         );
         return;
       }

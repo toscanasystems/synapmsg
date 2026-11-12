@@ -71,6 +71,7 @@ import {
   loadIdentityChangeLog,
   type IdentityChangeLogEntry,
 } from '../crypto/identityTrust';
+import { useChatsStore } from '../store/chats';
 
 const NOTIF_KEY = '@Synap/notifications_enabled';
 const READ_KEY = '@Synap/read_receipts';
@@ -1119,45 +1120,222 @@ export function SettingsScreen(): JSX.Element {
           <SettingsRow
             icon="clock"
             iconBg="#5856D6"
-            title="Dead Man's Switch"
-            subtitle="Inactividad → acción de seguridad"
+            title="Aviso de inactividad"
+            subtitle="Si no abres la app en X días"
             onPress={() => {
               void (async () => {
                 try {
                   const dms = await securityApi.getDms();
-                  Alert.alert(
-                    "Dead Man's Switch",
-                    dms.enabled
-                      ? `Activo · ${dms.idleDays} días · acción: ${dms.action}`
-                      : 'Desactivado',
-                    [
-                      { text: 'Cerrar', style: 'cancel' },
-                      {
-                        text: dms.enabled ? 'Desactivar' : 'Activar (30 días)',
-                        onPress: () => {
-                          void securityApi
-                            .setDms({
-                              enabled: !dms.enabled,
-                              idleDays: 30,
-                              action: 'notify',
-                            })
-                            .then(() =>
-                              Alert.alert(
-                                'Listo',
-                                !dms.enabled
-                                  ? 'DMS activado (30 días).'
-                                  : 'DMS desactivado.',
-                              ),
-                            )
-                            .catch(() =>
-                              Alert.alert('Error', 'No se pudo guardar DMS.'),
-                            );
+                  const meId = useAuthStore.getState().user?.id;
+                  const peers = useChatsStore
+                    .getState()
+                    .chats.flatMap((c) =>
+                      (c.participants || [])
+                        .filter((p) => p.userId && p.userId !== meId)
+                        .map((p) => ({
+                          id: p.userId as string,
+                          label:
+                            p.user?.displayName ||
+                            p.user?.privateNumber ||
+                            p.userId,
+                        })),
+                    );
+                  const uniq = new Map(peers.map((p) => [p.id, p]));
+                  const contactList = [...uniq.values()].slice(0, 8);
+
+                  const save = (
+                    idleDays: number,
+                    action: string,
+                    notifyContactIds: string[],
+                  ) => {
+                    void securityApi
+                      .setDms({
+                        enabled: true,
+                        idleDays,
+                        action,
+                        notifyContactIds,
+                      })
+                      .then(() =>
+                        Alert.alert(
+                          'Listo',
+                          `Inactividad: ${idleDays} día(s). Acción: ${action}.` +
+                            (notifyContactIds.length
+                              ? ` Avisa a ${notifyContactIds.length} contacto(s).`
+                              : ''),
+                        ),
+                      )
+                      .catch(() =>
+                        Alert.alert('Error', 'No se pudo guardar.'),
+                      );
+                  };
+
+                  const pickContactsThen = (
+                    idleDays: number,
+                    action: string,
+                  ) => {
+                    if (
+                      action !== 'notify' &&
+                      action !== 'wipe_and_notify'
+                    ) {
+                      save(idleDays, action, []);
+                      return;
+                    }
+                    if (contactList.length === 0) {
+                      Alert.alert(
+                        'Sin contactos',
+                        'No hay chats para avisar. Se avisará solo en este teléfono.',
+                        [
+                          {
+                            text: 'Continuar',
+                            onPress: () => save(idleDays, action, []),
+                          },
+                        ],
+                      );
+                      return;
+                    }
+                    const first = contactList[0];
+                    Alert.alert(
+                      'Contactos a avisar',
+                      first
+                        ? `¿Avisar a ${String(first.label).slice(0, 40)}?`
+                        : 'Sin contactos en chats.',
+                      [
+                        { text: 'Cancelar', style: 'cancel' },
+                        {
+                          text: 'Solo este teléfono',
+                          onPress: () => save(idleDays, action, []),
                         },
-                      },
-                    ],
-                  );
+                        first
+                          ? {
+                              text: 'Sí, avisar',
+                              onPress: () =>
+                                save(idleDays, action, [first.id]),
+                            }
+                          : {
+                              text: 'Continuar',
+                              onPress: () => save(idleDays, action, []),
+                            },
+                      ],
+                    );
+                  };
+
+                  const pickAction = (idleDays: number) => {
+                    setTimeout(() => {
+                      Alert.alert(
+                        'Acción al vencer',
+                        'Elige una. Nunca se hacen las dos salvo «Ambos».',
+                        [
+                          {
+                            text: 'Borrar sensibles',
+                            onPress: () =>
+                              pickContactsThen(idleDays, 'wipe'),
+                          },
+                          {
+                            text: 'Avisar contactos',
+                            onPress: () =>
+                              pickContactsThen(idleDays, 'notify'),
+                          },
+                          {
+                            text: 'Ambos…',
+                            onPress: () => {
+                              setTimeout(() => {
+                                Alert.alert(
+                                  'Confirmar ambos',
+                                  '¿Borrar datos sensibles Y avisar contactos?',
+                                  [
+                                    { text: 'Cancelar', style: 'cancel' },
+                                    {
+                                      text: 'Sí, ambos',
+                                      style: 'destructive',
+                                      onPress: () =>
+                                        pickContactsThen(
+                                          idleDays,
+                                          'wipe_and_notify',
+                                        ),
+                                    },
+                                  ],
+                                );
+                              }, 320);
+                            },
+                          },
+                        ],
+                      );
+                    }, 320);
+                  };
+
+                  const status =
+                    (dms.enabled
+                      ? `Activo · ${dms.idleDays} día(s) · ${dms.action}`
+                      : 'Desactivado') +
+                    (dms.lastFiredAt
+                      ? `\nÚltimo disparo: ${new Date(dms.lastFiredAt).toLocaleString()}`
+                      : '');
+
+                  Alert.alert('Aviso de inactividad', status, [
+                    { text: 'Cerrar', style: 'cancel' },
+                    dms.enabled
+                      ? {
+                          text: 'Desactivar',
+                          style: 'destructive' as const,
+                          onPress: () => {
+                            void securityApi
+                              .setDms({
+                                enabled: false,
+                                idleDays: dms.idleDays || 30,
+                                action: dms.action || 'notify',
+                                notifyContactIds: [],
+                              })
+                              .then(() =>
+                                Alert.alert('Listo', 'Desactivado.'),
+                              );
+                          },
+                        }
+                      : {
+                          text: 'Configurar',
+                          onPress: () => {
+                            setTimeout(() => {
+                              Alert.alert(
+                                'Días sin abrir la app',
+                                'Tras ese plazo se ejecuta solo la acción que elijas.',
+                                [
+                                  { text: 'Cancelar', style: 'cancel' },
+                                  {
+                                    text: '1 día',
+                                    onPress: () => pickAction(1),
+                                  },
+                                  {
+                                    text: 'Más…',
+                                    onPress: () => {
+                                      setTimeout(() => {
+                                        Alert.alert(
+                                          'Plazo',
+                                          'Elige 7 o 30 días.',
+                                          [
+                                            {
+                                              text: '7 días',
+                                              onPress: () => pickAction(7),
+                                            },
+                                            {
+                                              text: '30 días',
+                                              onPress: () => pickAction(30),
+                                            },
+                                            {
+                                              text: 'Cancelar',
+                                              style: 'cancel',
+                                            },
+                                          ],
+                                        );
+                                      }, 320);
+                                    },
+                                  },
+                                ],
+                              );
+                            }, 320);
+                          },
+                        },
+                  ]);
                 } catch {
-                  Alert.alert('Error', 'No se pudo cargar DMS.');
+                  Alert.alert('Error', 'No se pudo cargar el aviso.');
                 }
               })();
             }}

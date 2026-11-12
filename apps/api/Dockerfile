@@ -1,20 +1,20 @@
 FROM node:20-bookworm-slim AS build
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY apps/api/package.json apps/api/package-lock.json* ./
-COPY apps/api/prisma ./prisma
+COPY package.json package-lock.json* ./
+COPY prisma ./prisma
 RUN npm install --include=dev
-COPY apps/api/tsconfig.json ./
-COPY apps/api/src ./src
-COPY apps/api/public ./public
+COPY tsconfig.json ./
+COPY src ./src
+COPY public ./public
 RUN npx prisma generate && npm run build
 
 FROM node:20-bookworm-slim
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY apps/api/package.json apps/api/package-lock.json* ./
-COPY apps/api/prisma ./prisma
+COPY package.json package-lock.json* ./
+COPY prisma ./prisma
 RUN npm install --omit=dev && npx prisma generate
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/public ./public

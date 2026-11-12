@@ -59,13 +59,18 @@ export async function authMiddleware(
       ...payload,
       id: payload.sub,
     };
-    // Heartbeat for Dead Man's Switch (best-effort, non-blocking).
-    void prisma.user
-      .update({
-        where: { id: payload.sub },
-        data: { lastActiveAt: new Date() },
-      })
-      .catch(() => undefined);
+    // Heartbeat for inactivity switch — skip dms/check so the check itself
+    // does not reset the idle timer mid-evaluation.
+    const url = `${req.baseUrl || ''}${req.path || ''}${req.originalUrl || ''}`;
+    const skipHeartbeat = url.includes('/dms/check');
+    if (!skipHeartbeat) {
+      void prisma.user
+        .update({
+          where: { id: payload.sub },
+          data: { lastActiveAt: new Date() },
+        })
+        .catch(() => undefined);
+    }
     next();
   } catch (err) {
     next(err);

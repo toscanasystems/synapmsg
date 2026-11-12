@@ -68,9 +68,17 @@ export const securityApi = {
     enabled: boolean;
     idleDays: number;
     action: string;
+    notifyContactIds?: string[];
+    lastFiredAt?: string;
   }> {
     const { data } = await apiClient.get<{
-      dms: { enabled: boolean; idleDays: number; action: string };
+      dms: {
+        enabled: boolean;
+        idleDays: number;
+        action: string;
+        notifyContactIds?: string[];
+        lastFiredAt?: string;
+      };
     }>('/security/dms');
     return data.dms;
   },
@@ -79,8 +87,17 @@ export const securityApi = {
     enabled: boolean;
     idleDays: number;
     action: string;
+    notifyContactIds?: string[];
   }): Promise<void> {
     await apiClient.put('/security/dms', dms);
+  },
+
+  async checkDms(): Promise<{ fired: boolean; reason?: string }> {
+    const { data } = await apiClient.post<{
+      fired: boolean;
+      reason?: string;
+    }>('/security/dms/check');
+    return data;
   },
 
   async webauthnRegisterOptions(): Promise<Record<string, unknown>> {

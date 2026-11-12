@@ -25,9 +25,25 @@ Privado 1:1 Toscana SM-A356E (`RFCX41A9NQL`) ↔ Samsung SM-A566E (`R5CYA03YERH`
 
 ### Todavía no (no afirmar en marketing)
 
-- Dead Man’s Switch, StrongBox como paquete cerrado.
+- StrongBox como paquete cerrado.
 - Grupos E2E con libsignal; verificación QR escaneada en APK de release.
 - Llamadas, canales, archivos grandes como promesas cerradas.
+
+## 2026-11-12 — Fase 5.3 Aviso de inactividad
+
+### Demostrado
+
+API `api.synapmsg.ai` + Toscana SM-A356E (`RFCX41A9NQL`). Script `proof-dms-idle-1day.js` → `ok:true`.
+
+1. Config `idleDays: 1`, `action: notify` (sin wipe).
+2. `lastActiveAt` retrocedido >26 h; `POST /security/dms/check` → `fired: true`; config queda `enabled: false` con `lastFiredAt`.
+3. En el Toscana aparece el Alert con el texto  
+   `Aviso de inactividad: sin actividad > 1 día(s).` (UI dump 2026-11-12).
+4. Ajustes permite elegir 1/7/30 días y una sola acción (borrar / avisar / ambos solo si se confirma).
+
+### Todavía no
+
+- Disparo con la app sin red (solo reloj local).
 
 ## 2026-11-12 — Fase 5.2 Registro público de claves (KTL)
 

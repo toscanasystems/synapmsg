@@ -249,6 +249,7 @@ router.put('/dms', authMiddleware, async (req: Request, res: Response, next: Nex
       action?: unknown;
       /** Pre-armed ciphertext blob (client-encrypted). Server never sees plaintext. */
       payloadCiphertext?: unknown;
+      notifyContactIds?: unknown;
     };
     const enabled = Boolean(body.enabled);
     const idleDays =
@@ -258,6 +259,7 @@ router.put('/dms', authMiddleware, async (req: Request, res: Response, next: Nex
     const action =
       body.action === 'wipe' ||
       body.action === 'notify' ||
+      body.action === 'wipe_and_notify' ||
       body.action === 'message' ||
       body.action === 'ciphertext'
         ? body.action
@@ -266,7 +268,12 @@ router.put('/dms', authMiddleware, async (req: Request, res: Response, next: Nex
       typeof body.payloadCiphertext === 'string'
         ? body.payloadCiphertext.slice(0, 64_000)
         : undefined;
-    const cfg = { enabled, idleDays, action, payloadCiphertext };
+    const notifyContactIds = Array.isArray(body.notifyContactIds)
+      ? body.notifyContactIds
+          .filter((id): id is string => typeof id === 'string' && id.length > 0)
+          .slice(0, 20)
+      : [];
+    const cfg = { enabled, idleDays, action, payloadCiphertext, notifyContactIds };
     await prisma.glossaryEntry.upsert({
       where: { userId_source: { userId: req.user!.id, source: '__dms_config__' } },
       create: {
@@ -288,18 +295,37 @@ router.get('/dms', authMiddleware, async (req: Request, res: Response, next: Nex
       where: { userId_source: { userId: req.user!.id, source: '__dms_config__' } },
     });
     if (!row) {
-      res.json({ dms: { enabled: false, idleDays: 30, action: 'notify' } });
+      res.json({
+        dms: { enabled: false, idleDays: 30, action: 'notify', notifyContactIds: [] },
+      });
       return;
     }
     try {
       res.json({ dms: JSON.parse(row.target) });
     } catch {
-      res.json({ dms: { enabled: false, idleDays: 30, action: 'notify' } });
+      res.json({
+        dms: { enabled: false, idleDays: 30, action: 'notify', notifyContactIds: [] },
+      });
     }
   } catch (err) {
     next(err);
   }
 });
+
+/** Re-evaluate inactivity for the caller (used by proof / Settings). */
+router.post(
+  '/dms/check',
+  authMiddleware,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { tickDmsForUser } = await import('./dmsScheduler');
+      const result = await tickDmsForUser(req.user!.id);
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 router.post(
   '/webauthn/register/options',
