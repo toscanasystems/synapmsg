@@ -1,6 +1,7 @@
 ﻿/**
- * CallScreen — Synap signaling (invite/accept/end); media via Jitsi SFU
- * (default) or P2P WebRTC fallback from GET /call/config.
+ * CallScreen — Synap signaling (invite/accept/end).
+ * Media: P2P WebRTC only (DTLS-SRTP). Server never mixes audio.
+ * Jitsi SFU is disabled here — not E2E for Private chats.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -28,18 +29,24 @@ import { API_BASE_URL } from '../api/client';
 import wsManager from '../api/websocket';
 import { callsApi } from '../api/calls';
 import { UserAvatar } from '../components/UserAvatar';
+import { startRingtone, stopRingtone } from '../calls/ringtone';
+
+/** PIEZA 1: always P2P WebRTC — never route Private call media through an SFU. */
+const MEDIA_ENGINE = 'webrtc' as const;
 
 async function ensureCallPermissions(wantVideo: boolean): Promise<boolean> {
   try {
-    const audio = await Audio.requestPermissionsAsync();
-    if (!audio.granted) return false;
-
     if (Platform.OS === 'android') {
-      // Voz: solo micrófono — no pedir CAMERA (evita que otras apps / el sistema
-      // vean la cámara "en uso" por Synap sin necesidad).
       if (!wantVideo) {
         const mic = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          {
+            title: 'Micrófono para la llamada',
+            message:
+              'Synap necesita el micrófono para la llamada de voz cifrada. El audio no pasa por el servidor en claro.',
+            buttonPositive: 'Permitir',
+            buttonNegative: 'Cancelar',
+          },
         );
         return mic === PermissionsAndroid.RESULTS.GRANTED;
       }
@@ -52,6 +59,8 @@ async function ensureCallPermissions(wantVideo: boolean): Promise<boolean> {
         res[PermissionsAndroid.PERMISSIONS.CAMERA] === 'granted'
       );
     }
+    const audio = await Audio.requestPermissionsAsync();
+    if (!audio.granted) return false;
     return true;
   } catch {
     return false;
@@ -74,39 +83,11 @@ export function CallScreen(): JSX.Element {
   const [elapsed, setElapsed] = useState(0);
   const [webLoading, setWebLoading] = useState(true);
   const [statusHint, setStatusHint] = useState('Preparando…');
-  const [mediaEngine, setMediaEngine] = useState<'jitsi' | 'webrtc'>('webrtc');
-  const [jitsiDomain, setJitsiDomain] = useState('meet.jit.si');
   const [callRoom, setCallRoom] = useState(roomParam || '');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ringTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isVideo = callType === 'video';
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const headers: Record<string, string> = {};
-        if (token) headers.Authorization = `Bearer ${token}`;
-        const r = await fetch(`${API_BASE_URL}/call/config`, { headers });
-        if (!r.ok || cancelled) return;
-        const cfg = (await r.json()) as {
-          engine?: string;
-          jitsiDomain?: string;
-        };
-        if (cancelled) return;
-        if (cfg.engine === 'webrtc' || cfg.engine === 'jitsi') {
-          setMediaEngine(cfg.engine);
-        }
-        if (cfg.jitsiDomain) setJitsiDomain(cfg.jitsiDomain);
-      } catch {
-        /* keep defaults */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
 
   const callUrl = useMemo(() => {
     if (!callRoom) return '';
@@ -120,8 +101,7 @@ export function CallScreen(): JSX.Element {
       lang: me?.preferredLanguage || 'es',
       api: API_BASE_URL,
       ws,
-      engine: mediaEngine,
-      jitsi: jitsiDomain,
+      engine: MEDIA_ENGINE,
       room: callRoom,
     });
     return `${API_BASE_URL}/call?${q.toString()}`;
@@ -132,12 +112,11 @@ export function CallScreen(): JSX.Element {
     me?.name,
     me?.preferredLanguage,
     incoming,
-    mediaEngine,
-    jitsiDomain,
     callRoom,
   ]);
 
   const hangUp = useCallback(() => {
+    void stopRingtone();
     wsManager.send('call_end', { chatId });
     void callsApi.end(chatId).catch(() => undefined);
     setPhase('ended');
@@ -146,13 +125,26 @@ export function CallScreen(): JSX.Element {
   }, [chatId, navigation]);
 
   const enterCall = useCallback(() => {
+    void stopRingtone();
     setPhase('in_call');
     setWebLoading(true);
     setStatusHint(
-      callRoom ? 'Conectando audio/video…' : 'Esperando sala segura…',
+      callRoom ? 'Conectando audio cifrado…' : 'Esperando sala segura…',
     );
     if (ringTimeoutRef.current) clearTimeout(ringTimeoutRef.current);
   }, [callRoom]);
+
+  // Ringtone while ringing (incoming or outgoing).
+  useEffect(() => {
+    if (phase === 'ringing') {
+      void startRingtone();
+    } else {
+      void stopRingtone();
+    }
+    return () => {
+      void stopRingtone();
+    };
+  }, [phase]);
 
   // Permisos → invitar / sonar
   useEffect(() => {
@@ -163,10 +155,10 @@ export function CallScreen(): JSX.Element {
       if (cancelled) return;
       if (!ok) {
         Alert.alert(
-          'Permisos',
-          'Activa micrófono' +
-            (isVideo ? ' y cámara' : '') +
-            ' en Ajustes para llamar.',
+          'Permiso necesario',
+          isVideo
+            ? 'Para la videollamada Synap necesita micrófono y cámara. El audio/video van cifrados entre los teléfonos; el servidor no los oye.'
+            : 'Para la llamada de voz Synap necesita el micrófono. El audio va cifrado entre los teléfonos; el servidor no lo oye.',
           [{ text: 'OK', onPress: () => navigation.goBack() }],
         );
         return;
@@ -336,7 +328,7 @@ export function CallScreen(): JSX.Element {
         <View style={styles.webBar}>
           <Text style={styles.webTitle} numberOfLines={1}>
             {isVideo ? 'Videollamada' : 'Llamada'} · {contactName} · {clock}
-            {mediaEngine === 'jitsi' ? ' · SFU' : ' · P2P'}
+            {' · E2E'}
           </Text>
           <Pressable onPress={hangUp} style={styles.hangBtn} hitSlop={8}>
             <Feather name="phone-off" size={18} color="#fff" />
@@ -436,7 +428,8 @@ export function CallScreen(): JSX.Element {
       )}
 
       <Text style={styles.hint}>
-        Ambos teléfonos deben tener Synap abierto en pantalla para llamar.
+        Audio cifrado de extremo a extremo (WebRTC). Si el otro no tiene Synap
+        abierto, le llega notificación para contestar.
       </Text>
     </View>
   );

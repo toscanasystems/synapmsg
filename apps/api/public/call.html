@@ -299,6 +299,18 @@
     return pc;
   }
 
+  /** DTLS-SRTP is mandatory: refuse to signal SDP without fingerprint. */
+  function assertEncryptedSdp(sdp) {
+    const body = (sdp && sdp.sdp) || '';
+    if (!body || !/a=fingerprint:/i.test(body)) {
+      throw new Error('SDP sin fingerprint DTLS — llamada abortada');
+    }
+    if (/a=encryption:disabled/i.test(body)) {
+      throw new Error('Cifrado WebRTC desactivado — llamada abortada');
+    }
+    return sdp;
+  }
+
   async function makeOffer(force) {
     if (offerSent && !force) return;
     if (!peerReady && !force) return;
@@ -306,7 +318,7 @@
     try {
       makingOffer = true;
       await conn.setLocalDescription(await conn.createOffer({ iceRestart: !!force }));
-      sendSignal({ kind: 'sdp', sdp: conn.localDescription });
+      sendSignal({ kind: 'sdp', sdp: assertEncryptedSdp(conn.localDescription) });
       offerSent = true;
       setStatus(force ? 'Renegociando…' : 'Llamando al otro dispositivo…');
     } finally {
@@ -339,7 +351,7 @@
       await flushPendingIce(conn);
       if (signal.sdp.type === 'offer') {
         await conn.setLocalDescription(await conn.createAnswer());
-        sendSignal({ kind: 'sdp', sdp: conn.localDescription });
+        sendSignal({ kind: 'sdp', sdp: assertEncryptedSdp(conn.localDescription) });
         setStatus('Conectando…');
       }
       return;
