@@ -1,9 +1,25 @@
 import { apiClient } from './client';
 
 export const securityApi = {
-  async wipe(): Promise<void> {
-    await apiClient.post('/security/wipe', { reason: 'user_requested' });
+  async wipe(opts?: {
+    reason?: string;
+    issuerDeviceId?: string;
+  }): Promise<{
+    ok: boolean;
+    otherDevicesRemoved?: number;
+    issuerDeviceId?: string | null;
+  }> {
+    const { data } = await apiClient.post<{
+      ok: boolean;
+      otherDevicesRemoved?: number;
+      issuerDeviceId?: string | null;
+    }>('/security/wipe', {
+      reason: opts?.reason ?? 'user_requested',
+      issuerDeviceId: opts?.issuerDeviceId,
+    });
+    return data;
   },
+
 
   async generateRecoveryCodes(): Promise<string[]> {
     const { data } = await apiClient.post<{ codes: string[] }>(

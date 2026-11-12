@@ -41,27 +41,54 @@ function chainHash(prev: string, payload: string): string {
 
 router.post('/wipe', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const body = (req.body ?? {}) as {
+      reason?: unknown;
+      issuerDeviceId?: unknown;
+    };
     const reason =
-      typeof (req.body ?? {}).reason === 'string'
-        ? String((req.body as { reason: string }).reason).slice(0, 120)
+      typeof body.reason === 'string'
+        ? String(body.reason).slice(0, 120)
         : 'user_requested';
+    const issuerDeviceId =
+      typeof body.issuerDeviceId === 'string' && body.issuerDeviceId.trim()
+        ? body.issuerDeviceId.trim().slice(0, 64)
+        : null;
     const nonce = randomBytes(16).toString('hex');
     const issuedAt = new Date().toISOString();
+
+    // Drop other devices' public identities (session of "otro aparato").
+    // If issuerDeviceId is set, keep the issuer row; otherwise remove all.
+    const deleted = await prisma.deviceIdentity.deleteMany({
+      where: issuerDeviceId
+        ? { userId: req.user!.id, deviceId: { not: issuerDeviceId } }
+        : { userId: req.user!.id },
+    });
+
     const payload = {
       type: 'remote_wipe' as const,
       userId: req.user!.id,
       nonce,
       reason,
       issuedAt,
+      issuerDeviceId,
     };
     const sig = signWipePayload(payload);
-    sendToUser(req.user!.id, {
+    const delivered = sendToUser(req.user!.id, {
       ...payload,
       sig,
       alg: 'ed25519',
       pubKey: wipePublicKeyB64(),
     });
-    res.json({ ok: true, nonce, issuedAt, alg: 'ed25519', pubKey: wipePublicKeyB64() });
+    res.json({
+      ok: true,
+      nonce,
+      issuedAt,
+      alg: 'ed25519',
+      pubKey: wipePublicKeyB64(),
+      issuerDeviceId,
+      otherDevicesRemoved: deleted.count,
+      wsDelivered: delivered,
+    });
   } catch (err) {
     next(err);
   }
@@ -526,71 +553,28 @@ router.post(
           data: { decoyUserId: decoyId },
         });
 
-        // Shared decoy contact (idempotent by username)
-        let contact = await prisma.user.findUnique({
-          where: { username: 'synap_demo_contact' },
-        });
-        if (!contact) {
-          contact = await prisma.user.create({
-            data: {
-              email: 'demo.contact@synapmsg.local',
-              username: 'synap_demo_contact',
-              name: 'María López',
-              passwordHash: await argon2.hash(randomBytes(24).toString('hex')),
-              preferredLanguage: 'es',
-            },
-          });
-        }
+        // Empty decoy — no chats/messages (PIN de coacción → cuenta vacía).
+      }
 
-        const chat = await prisma.chat.create({
-          data: {
-            type: 'single',
-            encryptionMode: 'cloud',
-            participants: {
-              create: [
-                { userId: decoyId, role: 'member' },
-                { userId: contact.id, role: 'member' },
-              ],
-            },
-          },
+      // Always keep decoy empty (remove any leftover chats from older seeds).
+      const decoyChats = await prisma.chatParticipant.findMany({
+        where: { userId: decoyId },
+        select: { chatId: true },
+      });
+      const chatIds = [...new Set(decoyChats.map((c) => c.chatId))];
+      if (chatIds.length > 0) {
+        await prisma.message.deleteMany({ where: { chatId: { in: chatIds } } });
+        await prisma.chatParticipant.deleteMany({
+          where: { chatId: { in: chatIds } },
         });
-
-        const seeds = [
-          {
-            senderId: contact.id,
-            originalText: 'Hola! ¿Cómo estás?',
-            translatedText: 'Hola! ¿Cómo estás?',
-          },
-          {
-            senderId: decoyId,
-            originalText: 'Todo bien, gracias. ¿Nos vemos el sábado?',
-            translatedText: 'Todo bien, gracias. ¿Nos vemos el sábado?',
-          },
-          {
-            senderId: contact.id,
-            originalText: 'Claro, a las 5 en el café de siempre ☕',
-            translatedText: 'Claro, a las 5 en el café de siempre ☕',
-          },
-        ];
-        for (const s of seeds) {
-          await prisma.message.create({
-            data: {
-              chatId: chat.id,
-              senderId: s.senderId,
-              originalText: s.originalText,
-              originalLanguage: 'es',
-              translatedText: s.translatedText,
-              translatedLanguage: 'es',
-              isTranslated: false,
-            },
-          });
-        }
+        await prisma.chat.deleteMany({ where: { id: { in: chatIds } } });
       }
 
       res.json({
         ok: true,
         decoyUserId: decoyId,
         ready: true,
+        empty: true,
       });
     } catch (err) {
       next(err);

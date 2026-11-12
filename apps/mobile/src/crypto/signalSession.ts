@@ -27,13 +27,48 @@ const META_PREFIX = 'synap_signal_meta_';
 
 function b64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
-  let s = '';
-  for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]!);
-  return globalThis.btoa(s);
+  const chars =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const a = bytes[i]!;
+    const b = bytes[i + 1];
+    const c = bytes[i + 2];
+    out += chars[a >> 2];
+    out += chars[((a & 3) << 4) | ((b ?? 0) >> 4)];
+    out +=
+      b === undefined
+        ? '='
+        : chars[(((b ?? 0) & 15) << 2) | ((c ?? 0) >> 6)];
+    out += c === undefined ? '=' : chars[(c ?? 0) & 63];
+  }
+  return out;
 }
 
 function unb64(s: string): ArrayBuffer {
-  const bin = globalThis.atob(s);
+  const atobFn =
+    typeof globalThis.atob === 'function'
+      ? globalThis.atob.bind(globalThis)
+      : (bin: string) => {
+          const chars =
+            'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+          const clean = bin.replace(/=+$/, '');
+          let str = '';
+          for (let i = 0; i < clean.length; i += 4) {
+            const n =
+              (chars.indexOf(clean[i]!) << 18) |
+              (chars.indexOf(clean[i + 1]!) << 12) |
+              ((chars.indexOf(clean[i + 2]!) & 63) << 6) |
+              (chars.indexOf(clean[i + 3]!) & 63);
+            str += String.fromCharCode((n >> 16) & 255);
+            if (clean[i + 2] && clean[i + 2] !== '=')
+              str += String.fromCharCode((n >> 8) & 255);
+            if (clean[i + 3] && clean[i + 3] !== '=')
+              str += String.fromCharCode(n & 255);
+          }
+          return str;
+        };
+  const bin = atobFn(s);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out.buffer;
@@ -179,6 +214,40 @@ export async function getSignalIdentityPub(): Promise<string | null> {
 
 export async function getSignalDeviceId(): Promise<string | null> {
   return SecureStore.getItemAsync(DEVICE_ID_KEY);
+}
+
+/** Wipe Signal material from this device (remote wipe / duress). */
+export async function wipeSignalLocalSecrets(): Promise<void> {
+  const deviceId = await SecureStore.getItemAsync(DEVICE_ID_KEY);
+  if (deviceId) {
+    const store = new SecureSignalStore(deviceId);
+    const identity = await store.getIdentityKeyPair();
+    void identity;
+    await SecureStore.deleteItemAsync(`${META_PREFIX}${deviceId}`).catch(
+      () => undefined,
+    );
+    await SecureStore.deleteItemAsync(
+      `synap_signal_v1_${deviceId}_identity`,
+    ).catch(() => undefined);
+    await SecureStore.deleteItemAsync(`synap_signal_v1_${deviceId}_regId`).catch(
+      () => undefined,
+    );
+    for (let i = 1; i <= 40; i++) {
+      await store.removePreKey(i).catch(() => undefined);
+      await store.removeSignedPreKey(i).catch(() => undefined);
+    }
+  }
+  await SecureStore.deleteItemAsync(DEVICE_ID_KEY).catch(() => undefined);
+}
+
+/** Local identity private key bytes as base64 — never upload; prove-only. */
+export async function getSignalIdentityPrivB64ForProve(): Promise<string | null> {
+  const deviceId = await SecureStore.getItemAsync(DEVICE_ID_KEY);
+  if (!deviceId) return null;
+  const store = new SecureSignalStore(deviceId);
+  const kp = await store.getIdentityKeyPair();
+  if (!kp) return null;
+  return b64(kp.privKey);
 }
 
 type PeerBundleApi = {

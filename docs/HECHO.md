@@ -3,6 +3,29 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-12 — Fase 4 (PIN, clave por aparato, borrado remoto, coacción)
+
+### Demostrado
+
+Dispositivo: Samsung SM-A566E (`R5CYA03YERH`), APK `com.synapmsg.app` versionCode **69**,
+release sin Metro. Prueba `synapmsg://prove/phase4` → `ok:true` (UTC-6 2026-11-12).
+
+1. **PIN abre la app** — `pinUnlock: "ok"`. Huella: hardware sí, **sin huella enrolada**; el PIN alcanza (`bioEnrolled: false`).
+2. **Clave por aparato** — identidad Signal local; `privateKeyOnServer: false` (el servidor solo ve material público).
+3. **Borrado remoto de otro aparato** — se registró un segundo `deviceId`, se emitió wipe firmado; el peer WS recibió `remote_wipe`; el otro deviceId desapareció (`otherDeviceRemoved: true`) y el emisor se mantuvo (`issuerKept: true`).
+4. **PIN de coacción** — `duressUnlock: "duress"`; entra a cuenta señuelo distinta (`decoyIsNotReal: true`) y vacía (`decoyEmpty: true`, `decoyChatCount: 0`).
+
+### No demostrado en esta prueba
+
+- **FALTA SEGUNDO TELÉFONO** — no hay mensaje Privado 1:1 entre dos teléfonos reales ni opacidad del plaintext en la base para ese envío.
+
+### Todavía no (no afirmar en marketing)
+
+- Mensaje Privado leído en un segundo teléfono físico + ilegible en la DB (falta el segundo aparato).
+- FIDO2 / llaves físicas, KTL, Dead Man’s Switch, StrongBox como paquete cerrado.
+- Grupos E2E con libsignal; verificación QR escaneada en APK de release.
+- Llamadas, canales, archivos grandes como promesas cerradas.
+
 ## 2026-11-12 — Fase 3 (ML Kit on-device, chat Privado)
 
 ### Demostrado
@@ -26,10 +49,6 @@ Chat Nube / DeepL (12 idiomas) no se tocó en esta prueba.
 ### Todavía no (no afirmar en marketing)
 
 - Más pares on-device que inglés↔español en este teléfono.
-- Wipe remoto, PIN de coacción, FIDO2, KTL, Dead Man’s Switch, StrongBox
-  como paquete demostrado de punta a punta.
-- Grupos E2E con libsignal; verificación QR escaneada en APK de release.
-- Llamadas, canales, archivos grandes como promesas cerradas.
 - PDF comparativo regenerado sin promesas sin prueba (el PDF binario puede
   quedar desactualizado hasta regenerarlo; la verdad está aquí).
 

@@ -45,6 +45,7 @@ async function tick(): Promise<void> {
         nonce: randomBytes(16).toString('hex'),
         reason: 'dead_mans_switch',
         issuedAt: new Date().toISOString(),
+        issuerDeviceId: null as string | null,
       };
       const sig = signWipePayload(payload);
       sendToUser(user.id, {

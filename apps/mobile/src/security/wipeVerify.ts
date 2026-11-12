@@ -28,6 +28,7 @@ export type WipeCommand = {
   nonce?: string;
   reason?: string;
   issuedAt?: string;
+  issuerDeviceId?: string | null;
   sig?: string;
   alg?: string;
   pubKey?: string;
@@ -35,13 +36,18 @@ export type WipeCommand = {
 
 /** Rebuild the exact object the API signs (no sig/alg/pubKey). */
 export function wipeSignedPayload(cmd: WipeCommand): object {
-  return {
+  const base: Record<string, unknown> = {
     type: 'remote_wipe' as const,
     userId: cmd.userId,
     nonce: cmd.nonce,
     reason: cmd.reason,
     issuedAt: cmd.issuedAt,
   };
+  // Only when the server included the field (new wipe + DMS).
+  if (Object.prototype.hasOwnProperty.call(cmd, 'issuerDeviceId')) {
+    base.issuerDeviceId = cmd.issuerDeviceId ?? null;
+  }
+  return base;
 }
 
 export async function getPinnedWipePubKey(): Promise<string | null> {

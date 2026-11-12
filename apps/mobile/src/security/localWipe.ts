@@ -5,6 +5,7 @@
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getLocalDeviceId } from '../crypto/e2eKeys';
+import { wipeSignalLocalSecrets } from '../crypto/signalSession';
 import { clearPeerCache } from '../crypto/peerCache';
 import { clearAuthSession, vaultWipeAll } from './secureVault';
 import { sqlWipeAll } from './sqlcipherStore';
@@ -18,6 +19,7 @@ const PEER_INDEX = 'synapmsg_dr_peer_index';
 
 export async function wipeLocalSecrets(): Promise<void> {
   clearPeerCache();
+  await wipeSignalLocalSecrets().catch(() => undefined);
   const deviceId = await getLocalDeviceId();
   if (deviceId) {
     await SecureStore.deleteItemAsync(`${PRIV_PREFIX}${deviceId}`).catch(

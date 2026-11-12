@@ -382,6 +382,7 @@ export type WsServerMessage =
       nonce?: string;
       reason?: string;
       issuedAt?: string;
+      issuerDeviceId?: string | null;
       sig?: string;
       alg?: string;
       pubKey?: string;

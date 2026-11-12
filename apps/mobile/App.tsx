@@ -134,6 +134,25 @@ export default function App(): JSX.Element {
     })();
   }, [hydrate, hydratePrefs, hydrateLock, hydrateHidden]);
 
+  // Fase 4 prove deep link: synapmsg://prove/phase4?pin=2468&duress=1357
+  useEffect(() => {
+    const run = (url: string | null) => {
+      void import('./src/security/provePhase4').then(async (m) => {
+        const parsed = m.parsePhase4ProveUrl(url);
+        if (!parsed) return;
+        // Wait for auth hydrate.
+        for (let i = 0; i < 40; i++) {
+          if (useAuthStore.getState().isHydrated) break;
+          await new Promise((r) => setTimeout(r, 250));
+        }
+        await m.runPhase4Proof(parsed);
+      });
+    };
+    void Linking.getInitialURL().then(run);
+    const sub = Linking.addEventListener('url', (e) => run(e.url));
+    return () => sub.remove();
+  }, []);
+
   // Reconnect WS when returning to foreground (needed for incoming calls).
   useEffect(() => {
     const onChange = (next: AppStateStatus) => {
@@ -191,6 +210,15 @@ export default function App(): JSX.Element {
           if (!pinned || !verifyRemoteWipe(msg, pinned)) {
             console.warn('[wipe] rejected: missing pin or bad Ed25519 signature');
             return;
+          }
+          // Issuer keeps its session; other devices wipe.
+          if (msg.issuerDeviceId) {
+            const { getSignalDeviceId } = await import('./src/crypto/signalSession');
+            const mine = await getSignalDeviceId();
+            if (mine && mine === msg.issuerDeviceId) {
+              console.log('[wipe] skipped on issuer device', mine);
+              return;
+            }
           }
           await wipeLocalSecrets();
           useChatsStore.getState().reset();
