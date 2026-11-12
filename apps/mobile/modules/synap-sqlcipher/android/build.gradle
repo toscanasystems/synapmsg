@@ -1,0 +1,28 @@
+apply plugin: 'com.android.library'
+
+group = 'expo.modules.synapsqlcipher'
+version = '1.0.0'
+
+def expoModulesCorePlugin = new File(project(":expo-modules-core").projectDir.absolutePath, "ExpoModulesCorePlugin.gradle")
+apply from: expoModulesCorePlugin
+applyKotlinExpoModulesCorePlugin()
+useCoreDependencies()
+useDefaultAndroidSdkVersions()
+useExpoPublishing()
+
+android {
+  namespace "expo.modules.synapsqlcipher"
+  defaultConfig {
+    versionCode 1
+    versionName "1.0.0"
+    ndk {
+      abiFilters 'arm64-v8a'
+    }
+  }
+}
+
+dependencies {
+  // Real SQLCipher NDK (.so) — Zetetic sqlcipher-android
+  implementation 'net.zetetic:sqlcipher-android:4.9.0@aar'
+  implementation 'androidx.sqlite:sqlite:2.4.0'
+}

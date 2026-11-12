@@ -6,26 +6,40 @@
  *   • Normalize the API error shape into a thrown `ApiError`.
  *   • On 401 responses, hand control to a registered "unauthorized"
  *     handler (the auth store wires itself in via `setOnUnauthorized`).
- *
- * The base URL is configured through the `EXPO_PUBLIC_API_URL` env var
- * and falls back to localhost:3000 for development.
+ *   • Optional anti-censorship tunnel via media.synapmsg.ai (hides API IP).
  */
 
 import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS } from '../types';
 
-export const API_BASE_URL: string =
-  // EXPO_PUBLIC_* vars are inlined by Metro at build time.
-  (process.env.EXPO_PUBLIC_API_URL as string | undefined) ??
-  'http://localhost:3000';
+export const DIRECT_API_BASE_URL = 'https://api.synapmsg.ai';
+/** Cloudflare Worker reverse-proxy — ISP sees media CDN, not Railway. */
+export const TUNNEL_API_BASE_URL = 'https://media.synapmsg.ai/tunnel';
+
+/** Mutable base URL (direct or tunnel). */
+export let API_BASE_URL: string = DIRECT_API_BASE_URL;
+
+export function isTunnelActive(): boolean {
+  return API_BASE_URL.startsWith(TUNNEL_API_BASE_URL);
+}
 
 /**
- * WebSocket URL derived from the API base URL.
- * Replaces http(s):// with ws(s):// and appends /ws.
+ * Switch HTTP+WS base between direct API and media tunnel.
+ * Call after VPN preference changes; reconnect WS separately.
+ */
+export function setApiBaseUrl(useTunnel: boolean): void {
+  API_BASE_URL = useTunnel ? TUNNEL_API_BASE_URL : DIRECT_API_BASE_URL;
+  apiClient.defaults.baseURL = API_BASE_URL;
+}
+
+/**
+ * WebSocket URL — always hits the direct API.
+ * HTTP may use the Cloudflare tunnel for anti-censorship, but WS through
+ * the Worker is unreliable (calls look like "peer offline" with Synap open).
  */
 export function buildWsUrl(token: string): string {
-  const base = API_BASE_URL.replace(/^http/, 'ws');
+  const base = DIRECT_API_BASE_URL.replace(/^http/, 'ws');
   const sep = base.endsWith('/') ? '' : '/';
   return `${base}${sep}ws?token=${encodeURIComponent(token)}`;
 }
@@ -71,7 +85,7 @@ export function getAuthToken(): string | null {
 // ───────────────────────────────────────────────────────────
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 15_000,
+  timeout: 20_000,
   headers: {
     Accept: 'application/json',
     'Content-Type': 'application/json',

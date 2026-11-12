@@ -11,9 +11,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { create } from 'zustand';
 import authApi from '../api/auth';
-import { ApiError, setAuthToken, setOnUnauthorized } from '../api/client';
+import { mapAuthError } from '../api/authErrors';
+import { setAuthToken, setOnUnauthorized } from '../api/client';
 import wsManager from '../api/websocket';
-import { STORAGE_KEYS, User, LoginRequest, RegisterRequest } from '../types';
+import { User, LoginRequest, RegisterRequest } from '../types';
+import {
+  clearAuthSession,
+  getAuthSession,
+  setAuthSession,
+} from '../security/secureVault';
 
 interface AuthState {
   user: User | null;
@@ -26,6 +32,8 @@ interface AuthState {
   hydrate: () => Promise<void>;
   login: (payload: LoginRequest) => Promise<void>;
   register: (payload: RegisterRequest) => Promise<void>;
+  completeRecoveryLogin: (loginTicket: string, code: string) => Promise<void>;
+  adoptSession: (token: string, user: User) => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
   setUser: (user: User) => void;
@@ -44,11 +52,33 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   error: null,
 
   hydrate: async () => {
+    // Auto-login OFF by default (release). Opt-in: EXPO_PUBLIC_AUTO_LOGIN=1.
+    const autoLoginEnabled =
+      String(process.env.EXPO_PUBLIC_AUTO_LOGIN ?? '0').replace(/['"]/g, '') ===
+      '1';
+
+    const tryAutoLogin = async () => {
+      if (!autoLoginEnabled) return;
+      set({ isLoading: true, error: null });
+      try {
+        // Credentials only via env — never bake secrets into release APK.
+        const autoEmail = String(
+          process.env.EXPO_PUBLIC_AUTO_EMAIL ?? '',
+        ).replace(/['"]/g, '');
+        const autoPassword = String(
+          process.env.EXPO_PUBLIC_AUTO_PASSWORD ?? '',
+        ).replace(/['"]/g, '');
+        if (!autoEmail || !autoPassword) return;
+        await get().login({ email: autoEmail, password: autoPassword });
+      } catch {
+        /* Fall through to Login */
+      } finally {
+        set({ isLoading: false, isHydrated: true });
+      }
+    };
+
     try {
-      const [token, userJson] = await Promise.all([
-        AsyncStorage.getItem(STORAGE_KEYS.TOKEN),
-        AsyncStorage.getItem(STORAGE_KEYS.USER),
-      ]);
+      const { token, userJson } = await getAuthSession();
 
       if (token) {
         setAuthToken(token);
@@ -58,36 +88,88 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         // Best-effort refresh of the user profile (token may be stale).
         try {
           const { user: fresh } = await authApi.me();
-          await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(fresh));
+          await setAuthSession(token, JSON.stringify(fresh));
           set({ user: fresh });
-          // Now that we have a valid token, open the WebSocket.
           wsManager.connect(token);
+          return;
         } catch {
-          // If /me fails (e.g. 401), the unauthorized handler will fire.
+          // Dead/stale token → clear and auto-login so the user is never stuck.
+          setAuthToken(null);
+          await clearAuthSession();
+          set({ token: null, user: null });
+          await tryAutoLogin();
+          return;
         }
-      } else {
-        set({ isHydrated: true });
       }
-    } catch (err) {
+
+      if (autoLoginEnabled) {
+        set({ isHydrated: true });
+        await tryAutoLogin();
+        return;
+      }
+
+      set({ isHydrated: true });
+    } catch {
       // Hydration should never crash the app — fail gracefully.
       set({ isHydrated: true });
+      await tryAutoLogin();
     }
   },
 
   login: async (payload) => {
     set({ isLoading: true, error: null });
     try {
-      const { token, user } = await authApi.login(payload);
-      await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token);
-      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+      const result = await authApi.login(payload);
+      // Never block the owner with FIDO2 gate in the app.
+      if ('requiresWebAuthn' in result && result.requiresWebAuthn) {
+        set({
+          isLoading: false,
+          error:
+            'Login 2FA desactivado en servidor. Pedile a soporte LOGIN_SKIP_FIDO2=1 o usá otra cuenta.',
+        });
+        throw new Error('FIDO2_BLOCKED');
+      }
+      const { token, user } = result as {
+        token: string;
+        user: import('../types').User;
+      };
+      // Set session in memory first so UI enters even if vault write fails.
       setAuthToken(token);
-      wsManager.connect(token);
-      set({ token, user, isLoading: false });
+      set({ token, user, isLoading: false, error: null });
+      try {
+        await setAuthSession(token, JSON.stringify(user));
+      } catch {
+        /* persist best-effort */
+      }
+      try {
+        wsManager.connect(token);
+      } catch {
+        /* WS is best-effort; auth already succeeded */
+      }
     } catch (err) {
-      const message =
-        err instanceof ApiError && err.status > 0
-          ? err.message
-          : 'Could not reach the server. Check your connection.';
+      if (err instanceof Error && err.message === 'FIDO2_BLOCKED') {
+        throw err;
+      }
+      const message = mapAuthError(err);
+      set({ isLoading: false, error: message });
+      throw err;
+    }
+  },
+
+  completeRecoveryLogin: async (loginTicket: string, code: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const { token, user } = await authApi.loginWithRecovery(loginTicket, code);
+      await setAuthSession(token, JSON.stringify(user));
+      setAuthToken(token);
+      set({ token, user, isLoading: false, error: null });
+      try {
+        wsManager.connect(token);
+      } catch {
+        /* ignore */
+      }
+    } catch (err) {
+      const message = mapAuthError(err);
       set({ isLoading: false, error: message });
       throw err;
     }
@@ -97,25 +179,38 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const { token, user } = await authApi.register(payload);
-      await AsyncStorage.setItem(STORAGE_KEYS.TOKEN, token);
-      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+      // Persist + set auth state BEFORE opening the socket so the UI
+      // can switch to the authenticated stack immediately.
+      await setAuthSession(token, JSON.stringify(user));
       setAuthToken(token);
-      wsManager.connect(token);
-      set({ token, user, isLoading: false });
+      set({ token, user, isLoading: false, error: null });
+      try {
+        wsManager.connect(token);
+      } catch {
+        /* WS is best-effort; auth already succeeded */
+      }
     } catch (err) {
-      const message =
-        err instanceof ApiError && err.status > 0
-          ? err.message
-          : 'Could not reach the server. Check your connection.';
+      const message = mapAuthError(err);
       set({ isLoading: false, error: message });
       throw err;
+    }
+  },
+
+  adoptSession: async (token, user) => {
+    await setAuthSession(token, JSON.stringify(user));
+    setAuthToken(token);
+    set({ token, user, isLoading: false, error: null });
+    try {
+      wsManager.connect(token);
+    } catch {
+      /* ignore */
     }
   },
 
   logout: async () => {
     wsManager.disconnect();
     setAuthToken(null);
-    await AsyncStorage.multiRemove([STORAGE_KEYS.TOKEN, STORAGE_KEYS.USER]);
+    await clearAuthSession();
     set({ token: null, user: null, error: null });
   },
 

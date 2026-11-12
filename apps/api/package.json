@@ -10,7 +10,7 @@
     "start": "node dist/index.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:push": "prisma db push",
+    "prisma:push": "prisma db push --skip-generate",
     "prisma:studio": "prisma studio",
     "typecheck": "tsc --noEmit"
   },
@@ -24,7 +24,11 @@
   "author": "Synapmsg",
   "license": "MIT",
   "dependencies": {
+    "@noble/hashes": "^1.8.0",
+    "@noble/post-quantum": "^0.7.1",
     "@prisma/client": "^5.22.0",
+    "@simplewebauthn/server": "^14.1.0",
+    "argon2": "^0.41.1",
     "axios": "^1.7.7",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
@@ -32,6 +36,9 @@
     "express": "^4.21.1",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
+    "stripe": "^17.7.0",
+    "svix": "^2.5.0",
+    "tweetnacl": "^1.0.3",
     "ws": "^8.18.0"
   },
   "devDependencies": {

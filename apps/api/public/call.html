@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Synapmsg Call</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: #0B141A; color: #fff; font-family: system-ui, sans-serif; overflow: hidden; }
+    #stage { position: relative; width: 100%; height: 100%; background: #000; }
+    video { background: #111; object-fit: cover; }
+    #remote { width: 100%; height: 100%; }
+    #local {
+      position: absolute; right: 12px; top: 12px; width: 112px; height: 160px;
+      border-radius: 12px; border: 2px solid #30B0B0; z-index: 2; transform: scaleX(-1);
+    }
+    #local.audio-only { display: none; }
+    #banner {
+      position: absolute; left: 0; right: 0; bottom: 148px; text-align: center;
+      z-index: 3; padding: 0 16px; pointer-events: none;
+    }
+    #status { font-size: 15px; color: #40C0C0; text-shadow: 0 1px 4px #000; white-space: pre-line; }
+    #captions {
+      position: absolute; left: 12px; right: 12px; bottom: 96px; z-index: 3;
+      min-height: 44px; max-height: 96px; overflow: hidden;
+      background: rgba(0,0,0,0.55); border-radius: 12px; padding: 10px 12px;
+      font-size: 15px; line-height: 1.35; text-align: center;
+      display: none;
+    }
+    #captions.show { display: block; }
+    #captions .who { color: #40C0C0; font-size: 12px; margin-bottom: 4px; }
+    #avatar {
+      display: none; position: absolute; inset: 0; align-items: center; justify-content: center;
+      flex-direction: column; gap: 12px; z-index: 1;
+    }
+    #avatar.show { display: flex; }
+    #avatar .circle {
+      width: 96px; height: 96px; border-radius: 48px; background: #30B0B0; color: #000;
+      display: flex; align-items: center; justify-content: center; font-size: 32px; font-weight: 700;
+    }
+    #controls {
+      position: absolute; left: 0; right: 0; bottom: 16px; display: flex;
+      justify-content: center; gap: 14px; z-index: 4;
+    }
+    button.ctrl {
+      width: 52px; height: 52px; border-radius: 26px; border: none; font-size: 20px;
+      background: #2A2A2A; color: #fff;
+    }
+    button.ctrl.off { background: #E53935; }
+    button.ctrl.on { background: #30B0B0; color: #000; }
+    button#hang { background: #E53935; width: 60px; height: 60px; border-radius: 30px; }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <video id="remote" autoplay playsinline></video>
+    <video id="local" autoplay playsinline muted></video>
+    <div id="avatar"><div class="circle" id="initials">?</div><div id="peerName">Conectando…</div></div>
+    <div id="banner"><div id="status">Conectando…</div></div>
+    <div id="captions"><div class="who" id="capWho"></div><div id="capText"></div></div>
+    <div id="controls">
+      <button class="ctrl" id="muteMic" title="Mic">🎤</button>
+      <button class="ctrl" id="muteCam" title="Cámara">📷</button>
+      <button class="ctrl" id="ccBtn" title="Subtítulos">CC</button>
+      <button class="ctrl" id="hang" title="Colgar">📞</button>
+    </div>
+  </div>
+  <script>
+(function () {
+  const params = new URLSearchParams(location.search);
+  const token = params.get('token') || '';
+  const chatId = params.get('chatId') || '';
+  const video = params.get('video') !== '0';
+  const displayName = params.get('name') || 'Synapmsg';
+  const role = params.get('role') || 'caller';
+  const preferLang = (params.get('lang') || 'es').toLowerCase();
+  const apiBase = params.get('api') || (location.protocol + '//' + location.host);
+  const wsBase = params.get('ws') || ((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+
+  const statusEl = document.getElementById('status');
+  const remoteVideo = document.getElementById('remote');
+  const localVideo = document.getElementById('local');
+  const avatar = document.getElementById('avatar');
+  const initials = document.getElementById('initials');
+  const peerName = document.getElementById('peerName');
+  const muteMicBtn = document.getElementById('muteMic');
+  const muteCamBtn = document.getElementById('muteCam');
+  const ccBtn = document.getElementById('ccBtn');
+  const captionsEl = document.getElementById('captions');
+  const capWho = document.getElementById('capWho');
+  const capText = document.getElementById('capText');
+
+  initials.textContent = (displayName.trim()[0] || 'S').toUpperCase();
+  peerName.textContent = displayName;
+  if (!video) {
+    localVideo.classList.add('audio-only');
+    avatar.classList.add('show');
+    muteCamBtn.style.display = 'none';
+  }
+
+  function setStatus(t) { statusEl.textContent = t; }
+  function postNative(obj) {
+    try {
+      if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(obj));
+    } catch (_) {}
+  }
+
+  let pc = null;
+  let localStream = null;
+  /** Reserva cámara secundaria (trasera/delantera) para exclusividad vs otras apps */
+  let reservedCamStream = null;
+  let ws = null;
+  let polite = role === 'callee';
+  let makingOffer = false;
+  let ignoreOffer = false;
+  let micOn = true;
+  let camOn = video;
+  let peerReady = false;
+  let offerSent = false;
+  let captionsOn = false;
+  let recognition = null;
+  let hungUp = false;
+  let iceRestartCount = 0;
+  let wsRetry = 0;
+  let wsRetryTimer = null;
+  const pendingIce = [];
+
+  let iceServers = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+  ];
+
+  async function loadIceFromConfig() {
+    try {
+      const r = await fetch(apiBase.replace(/\/$/, '') + '/call/config');
+      if (!r.ok) return;
+      const cfg = await r.json();
+      if (Array.isArray(cfg.iceServers) && cfg.iceServers.length) {
+        iceServers = cfg.iceServers;
+      }
+    } catch (_) {}
+  }
+
+  function sendSignal(payload) {
+    if (!ws || ws.readyState !== 1) return;
+    ws.send(JSON.stringify({ type: 'webrtc_signal', chatId, signal: payload }));
+  }
+
+  function stopStream(stream) {
+    if (!stream) return;
+    try {
+      stream.getTracks().forEach((t) => {
+        try { t.stop(); } catch (_) {}
+      });
+    } catch (_) {}
+  }
+
+  /** En videollamada: abre la otra cámara y la mantiene viva (sin enviar) para bloquearla. */
+  async function lockSecondaryCamera() {
+    if (!video || reservedCamStream) return;
+    try {
+      reservedCamStream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: {
+          facingMode: { exact: 'environment' },
+          width: { ideal: 320 },
+          height: { ideal: 240 },
+        },
+      });
+      // Mantener tracks activos pero silenciados (no se muestran ni se envían)
+      reservedCamStream.getVideoTracks().forEach((t) => {
+        t.enabled = true;
+        try { t.contentHint = 'motion'; } catch (_) {}
+      });
+      postNative({ type: 'camera-locked', both: true });
+    } catch (_) {
+      // Muchos Android solo permiten una cámara a la vez: la primaria ya la bloquea
+      postNative({ type: 'camera-locked', both: false });
+    }
+  }
+
+  async function ensureMedia() {
+    if (localStream) return localStream;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error('Este WebView no soporta cámara/micrófono');
+    }
+
+    // Llamada de voz: SOLO micrófono — nunca pedir ni abrir cámara
+    if (!video) {
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: false,
+      });
+      // Defensa: si el WebView inyectara video, matarlo al instante
+      localStream.getVideoTracks().forEach((t) => {
+        try { t.stop(); localStream.removeTrack(t); } catch (_) {}
+      });
+      localVideo.srcObject = null;
+      postNative({ type: 'camera-blocked' });
+      return localStream;
+    }
+
+    // Videollamada: abrir frontal con constraints estrictos y mantenerla abierta
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: {
+        facingMode: { ideal: 'user' },
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+      },
+    });
+    localStream.getVideoTracks().forEach((t) => {
+      t.enabled = true;
+      try { t.contentHint = 'motion'; } catch (_) {}
+    });
+    localVideo.srcObject = localStream;
+    // Intentar reservar la trasera en paralelo (exclusividad)
+    void lockSecondaryCamera();
+    return localStream;
+  }
+
+  async function flushPendingIce(conn) {
+    while (pendingIce.length) {
+      const c = pendingIce.shift();
+      try { await conn.addIceCandidate(c); } catch (_) {}
+    }
+  }
+
+  async function ensurePc() {
+    if (pc) return pc;
+    pc = new RTCPeerConnection({ iceServers, iceCandidatePoolSize: 8 });
+    pc.onicecandidate = (ev) => {
+      if (ev.candidate) sendSignal({ kind: 'ice', candidate: ev.candidate });
+    };
+    pc.ontrack = (ev) => {
+      remoteVideo.srcObject = ev.streams[0] || new MediaStream([ev.track]);
+      try { remoteVideo.play(); } catch (_) {}
+      if (video) avatar.classList.remove('show');
+      setStatus('Conectado');
+      iceRestartCount = 0;
+      postNative({ type: 'connected' });
+    };
+    pc.oniceconnectionstatechange = () => {
+      const s = pc && pc.iceConnectionState;
+      if (s === 'connected' || s === 'completed') {
+        setStatus('Conectado');
+        iceRestartCount = 0;
+      } else if (s === 'checking') {
+        setStatus('Negociando red…');
+      } else if (s === 'disconnected') {
+        setStatus('Señal débil…');
+        setTimeout(() => {
+          if (pc && pc.iceConnectionState === 'disconnected' && iceRestartCount < 3) {
+            iceRestartCount += 1;
+            setStatus('Reconectando ICE…');
+            try {
+              pc.restartIce();
+              if (role === 'caller') {
+                offerSent = false;
+                void makeOffer(true);
+              }
+            } catch (_) {}
+          }
+        }, 1800);
+      } else if (s === 'failed') {
+        if (iceRestartCount < 4) {
+          iceRestartCount += 1;
+          setStatus('Reintentando ICE (' + iceRestartCount + ')…');
+          try {
+            pc.restartIce();
+            if (role === 'caller') {
+              offerSent = false;
+              void makeOffer(true);
+            }
+          } catch (_) {
+            setStatus('No se pudo conectar. Cuelga y reintenta.');
+            postNative({ type: 'error', message: 'ice-failed' });
+          }
+        } else {
+          setStatus('No se pudo conectar. Cuelga y reintenta.');
+          postNative({ type: 'error', message: 'ice-failed' });
+        }
+      }
+    };
+    pc.onconnectionstatechange = () => {
+      const s = pc && pc.connectionState;
+      if (s === 'connected') {
+        setStatus('Conectado');
+        postNative({ type: 'connected' });
+      } else if (s === 'connecting') {
+        setStatus('Conectando audio/video…');
+      } else if (s === 'failed') {
+        setStatus('Enlace falló. Reintentando…');
+      }
+    };
+    const stream = await ensureMedia();
+    stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+    return pc;
+  }
+
+  async function makeOffer(force) {
+    if (offerSent && !force) return;
+    if (!peerReady && !force) return;
+    const conn = await ensurePc();
+    try {
+      makingOffer = true;
+      await conn.setLocalDescription(await conn.createOffer({ iceRestart: !!force }));
+      sendSignal({ kind: 'sdp', sdp: conn.localDescription });
+      offerSent = true;
+      setStatus(force ? 'Renegociando…' : 'Llamando al otro dispositivo…');
+    } finally {
+      makingOffer = false;
+    }
+  }
+
+  async function onSignal(signal) {
+    if (!signal || !signal.kind) return;
+
+    if (signal.kind === 'ready') {
+      peerReady = true;
+      if (role === 'caller') await makeOffer(false);
+      return;
+    }
+
+    if (signal.kind === 'caption') {
+      showCaption(signal.from || 'Ellos', signal.text || '', signal.translated || '');
+      return;
+    }
+
+    const conn = await ensurePc();
+    if (signal.kind === 'sdp') {
+      const offerCollision =
+        signal.sdp.type === 'offer' &&
+        (makingOffer || conn.signalingState !== 'stable');
+      ignoreOffer = !polite && offerCollision;
+      if (ignoreOffer) return;
+      await conn.setRemoteDescription(signal.sdp);
+      await flushPendingIce(conn);
+      if (signal.sdp.type === 'offer') {
+        await conn.setLocalDescription(await conn.createAnswer());
+        sendSignal({ kind: 'sdp', sdp: conn.localDescription });
+        setStatus('Conectando…');
+      }
+      return;
+    }
+    if (signal.kind === 'ice' && signal.candidate) {
+      if (!conn.remoteDescription) {
+        pendingIce.push(signal.candidate);
+        return;
+      }
+      try {
+        await conn.addIceCandidate(signal.candidate);
+      } catch (e) {
+        if (!ignoreOffer) console.warn(e);
+      }
+    }
+  }
+
+  function showCaption(who, original, translated) {
+    captionsEl.classList.add('show');
+    capWho.textContent = who;
+    capText.textContent = translated && translated !== original
+      ? translated
+      : original;
+  }
+
+  async function translateCaption(text) {
+    try {
+      const resp = await fetch(apiBase + '/users/me/translate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + token,
+        },
+        body: JSON.stringify({ text, targetLang: preferLang }),
+      });
+      if (!resp.ok) return text;
+      const data = await resp.json();
+      return data.text || text;
+    } catch (_) {
+      return text;
+    }
+  }
+
+  function startCaptions() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      setStatus('Subtítulos no disponibles en este dispositivo');
+      captionsOn = false;
+      ccBtn.classList.remove('on');
+      return;
+    }
+    recognition = new SR();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = preferLang === 'en' ? 'en-US' : preferLang === 'pt' ? 'pt-BR' : 'es-ES';
+    let lastFinal = '';
+    recognition.onresult = async (ev) => {
+      let interim = '';
+      let finalText = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const t = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) finalText += t;
+        else interim += t;
+      }
+      const shown = (finalText || interim).trim();
+      if (!shown) return;
+      showCaption('Tú', shown, '');
+      if (finalText && finalText !== lastFinal) {
+        lastFinal = finalText;
+        const translated = await translateCaption(finalText.trim());
+        sendSignal({
+          kind: 'caption',
+          from: displayName,
+          text: finalText.trim(),
+          translated,
+        });
+        showCaption('Tú', finalText.trim(), translated);
+      }
+    };
+    recognition.onerror = () => {
+      // Auto-restart after brief pause (common on mobile WebViews)
+      if (captionsOn) {
+        setTimeout(() => {
+          try { if (recognition) recognition.start(); } catch (_) {}
+        }, 600);
+      }
+    };
+    recognition.onend = () => {
+      if (captionsOn) {
+        try { recognition.start(); } catch (_) {}
+      }
+    };
+    try {
+      recognition.start();
+    } catch (_) {}
+  }
+
+  function stopCaptions() {
+    if (recognition) {
+      try { recognition.onend = null; recognition.stop(); } catch (_) {}
+      recognition = null;
+    }
+  }
+
+  function hangup() {
+    if (hungUp) return;
+    hungUp = true;
+    stopCaptions();
+    if (wsRetryTimer) clearTimeout(wsRetryTimer);
+    try {
+      if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'call_end', chatId }));
+    } catch (_) {}
+    try { if (ws) ws.close(); } catch (_) {}
+    if (pc) { try { pc.close(); } catch (_) {} pc = null; }
+    stopStream(localStream);
+    localStream = null;
+    stopStream(reservedCamStream);
+    reservedCamStream = null;
+    postNative({ type: 'hangup' });
+  }
+
+  muteMicBtn.onclick = () => {
+    micOn = !micOn;
+    if (localStream) localStream.getAudioTracks().forEach((t) => { t.enabled = micOn; });
+    muteMicBtn.classList.toggle('off', !micOn);
+    muteMicBtn.textContent = micOn ? '🎤' : '🔇';
+  };
+  muteCamBtn.onclick = () => {
+    if (!video) return;
+    camOn = !camOn;
+    // enabled=false (no stop): mantiene el bloqueo exclusivo de la cámara
+    if (localStream) localStream.getVideoTracks().forEach((t) => { t.enabled = camOn; });
+    muteCamBtn.classList.toggle('off', !camOn);
+  };
+  ccBtn.onclick = () => {
+    captionsOn = !captionsOn;
+    ccBtn.classList.toggle('on', captionsOn);
+    if (captionsOn) {
+      captionsEl.classList.add('show');
+      startCaptions();
+      setStatus('Subtítulos ON');
+    } else {
+      stopCaptions();
+      captionsEl.classList.remove('show');
+    }
+  };
+  document.getElementById('hang').onclick = hangup;
+
+  function connectWs() {
+    if (hungUp) return;
+    const url = wsBase + (wsBase.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+    ws = new WebSocket(url);
+    ws.onopen = async () => {
+      wsRetry = 0;
+      setStatus(video ? 'Permisos de micrófono/cámara…' : 'Permisos de micrófono…');
+      try {
+        await ensureMedia();
+        setStatus(role === 'caller' ? 'Esperando al otro…' : 'Entrando…');
+        sendSignal({ kind: 'ready' });
+        setTimeout(() => sendSignal({ kind: 'ready' }), 800);
+        setTimeout(() => sendSignal({ kind: 'ready' }), 2000);
+        postNative({ type: 'media-ok' });
+      } catch (e) {
+        const msg = (e && e.message) ? e.message : String(e);
+        setStatus(
+          (video ? 'Activa micrófono y cámara para Synapmsg\n' : 'Activa el micrófono para Synapmsg\n') + msg
+        );
+        postNative({ type: 'error', message: msg });
+      }
+    };
+    ws.onmessage = async (ev) => {
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch { return; }
+      if (msg.type === 'webrtc_signal' && msg.chatId === chatId && msg.signal) {
+        await onSignal(msg.signal);
+      }
+      if ((msg.type === 'call_end' || msg.type === 'call_reject') && msg.chatId === chatId) {
+        setStatus('La otra persona colgó');
+        setTimeout(hangup, 400);
+      }
+    };
+    ws.onclose = () => {
+      if (hungUp) return;
+      if (wsRetry >= 6) {
+        setStatus('Desconectado del servidor');
+        return;
+      }
+      wsRetry += 1;
+      const delay = Math.min(8000, 600 * Math.pow(1.6, wsRetry));
+      setStatus('Reconectando señal… (' + wsRetry + ')');
+      wsRetryTimer = setTimeout(connectWs, delay);
+    };
+    ws.onerror = () => {
+      /* onclose will retry */
+    };
+  }
+
+  if (!token || !chatId) {
+    setStatus('Falta token o chatId');
+  } else {
+    loadIceFromConfig().finally(connectWs);
+  }
+  window.addEventListener('pagehide', hangup);
+})();
+  </script>
+</body>
+</html>

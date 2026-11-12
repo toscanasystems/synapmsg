@@ -1,0 +1,89 @@
+﻿import type { Metadata } from "next";
+import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Soporte — Synap",
+  description: "Ayuda y preguntas frecuentes de Synap.",
+};
+
+const faqs = [
+  {
+    q: "¿Qué es Synap?",
+    a: "Una app de mensajería con seguridad absoluta: cifrado extremo a extremo, Private Number sin SIM, wipe remoto, PIN de coacción y defensa post-cuántica.",
+  },
+  {
+    q: "¿Mis chats son privados?",
+    a: "Sí. En modo Privado el contenido usa E2E: el servidor solo ve ciphertext. No leemos tus conversaciones ni las usamos para anuncios.",
+  },
+  {
+    q: "¿Dónde descargo Android?",
+    a: "En synapmsg.ai — botón Descargar Android (APK). Instalá y creá tu cuenta con email o Private Number.",
+  },
+  {
+    q: "¿Cuánto cuesta Premium?",
+    a: "Gratis incluye el paquete de seguridad. Premium es $4.99 USD / mes (más media y soporte). Se activa desde Ajustes en la app.",
+  },
+  {
+    q: "¿Cómo elimino mi cuenta?",
+    a: "Escríbenos a soporte@synapmsg.ai desde el email de tu cuenta y procesaremos la eliminación.",
+  },
+  {
+    q: "¿Dónde está la política de privacidad?",
+    a: "En synapmsg.ai/privacy.",
+  },
+];
+
+export default function SupportPage() {
+  return (
+    <main className="min-h-screen bg-primary-soft text-white">
+      <div className="mx-auto max-w-3xl px-6 py-16">
+        <Link href="/" className="text-sm text-accent-light hover:underline">
+          ← Volver a Synap
+        </Link>
+        <h1 className="mt-6 font-serif text-4xl font-bold text-white">Soporte</h1>
+        <p className="mt-3 text-gray-300">
+          ¿Necesitas ayuda? Revisa las preguntas frecuentes o escríbenos a{" "}
+          <a href="mailto:soporte@synapmsg.ai" className="text-accent-light underline">
+            soporte@synapmsg.ai
+          </a>
+          .
+        </p>
+
+        <div className="mt-8">
+          <a
+            href="https://media.synapmsg.ai/downloads/synap-android.apk"
+            className="inline-flex rounded-xl bg-accent px-6 py-3 font-semibold text-black hover:bg-accent/90"
+          >
+            Descargar APK Android
+          </a>
+        </div>
+
+        <div className="mt-10 space-y-6">
+          {faqs.map((item) => (
+            <section key={item.q} className="rounded-xl border border-white/10 bg-surface p-5">
+              <h2 className="text-lg font-semibold text-white">{item.q}</h2>
+              <p className="mt-2 text-gray-300 leading-relaxed">{item.a}</p>
+            </section>
+          ))}
+        </div>
+
+        <div className="mt-12 rounded-xl bg-primary px-6 py-8 text-white">
+          <h2 className="text-xl font-semibold">Contacto directo</h2>
+          <p className="mt-2 text-gray-300">
+            Toscana Systems, S.A.
+            <br />
+            Email:{" "}
+            <a href="mailto:soporte@synapmsg.ai" className="text-accent underline">
+              soporte@synapmsg.ai
+            </a>
+            <br />
+            Privacidad:{" "}
+            <Link href="/privacy" className="text-accent underline">
+              synapmsg.ai/privacy
+            </Link>
+          </p>
+        </div>
+      </div>
+    </main>
+  );
+}

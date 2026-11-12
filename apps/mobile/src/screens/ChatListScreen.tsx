@@ -1,25 +1,21 @@
 /**
- * ChatListScreen — main inbox.
- *
- * Header: "Synapmsg" title + settings icon (top right)
- * List rows: avatar + contact name + last-message preview + timestamp + unread badge
- * Pull-to-refresh
- * FAB (+) bottom right → NewChatScreen
- * Empty state: "No chats yet. Tap + to start a conversation!"
- *
- * Real-time: the chats store is updated by the global WebSocket listener
- * registered in App.tsx, so we just subscribe to the store.
+ * ChatListScreen — inbox.
+ * Uses ScrollView (not FlatList) to avoid Android removeClippedSubviews
+ * eating taps on some Samsung devices.
  */
 
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  FlatList,
+  ScrollView,
   Pressable,
   RefreshControl,
-  ListRenderItem,
+  Image,
+  Alert,
+  TextInput,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -29,6 +25,9 @@ import colors from '../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
 import { useAuthStore } from '../store/auth';
 import { useChatsStore } from '../store/chats';
+import { useChatPrefsStore } from '../store/chatPrefs';
+import { useSmartFoldersStore } from '../store/smartFolders';
+import { useHiddenChatsStore } from '../store/hiddenChats';
 import { Chat, RootStackParamList } from '../types';
 import { UserAvatar } from '../components/UserAvatar';
 import { EmptyState } from '../components/EmptyState';
@@ -44,7 +43,6 @@ function formatPreviewTime(iso?: string): string {
   if (sameDay) {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
-  // Within the last 7 days → weekday; older → date.
   const diffMs = now.getTime() - d.getTime();
   const oneDayMs = 24 * 60 * 60 * 1000;
   if (diffMs < 7 * oneDayMs) {
@@ -64,98 +62,244 @@ export function ChatListScreen(): JSX.Element {
   const isLoading = useChatsStore((s) => s.isLoading);
   const fetchChats = useChatsStore((s) => s.fetchChats);
   const clearUnread = useChatsStore((s) => s.clearUnread);
+  const archivedChatIds = useChatPrefsStore((s) => s.archivedChatIds);
+  const toggleArchive = useChatPrefsStore((s) => s.toggleArchive);
+  const smartOn = useSmartFoldersStore((s) => s.enabled);
+  const smartGroup = useSmartFoldersStore((s) => s.group);
+  const hiddenIds = useHiddenChatsStore((s) => s.hiddenChatIds);
+  const hiddenUnlocked = useHiddenChatsStore((s) => s.unlocked);
+  const unlockHidden = useHiddenChatsStore((s) => s.unlockWithPin);
+  const lockHidden = useHiddenChatsStore((s) => s.lockFolder);
+  const [showArchived, setShowArchived] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
+  const [pinOpen, setPinOpen] = useState(false);
+  const [pinDraft, setPinDraft] = useState('');
+
+  const { activeChats, archivedChats, hiddenChats } = useMemo(() => {
+    const hidden = chats.filter((c) => hiddenIds.includes(c.id));
+    const archived = chats.filter(
+      (c) => archivedChatIds.includes(c.id) && !hiddenIds.includes(c.id),
+    );
+    const active = chats.filter(
+      (c) =>
+        !archivedChatIds.includes(c.id) && !hiddenIds.includes(c.id),
+    );
+    return { activeChats: active, archivedChats: archived, hiddenChats: hidden };
+  }, [chats, archivedChatIds, hiddenIds]);
+
+  const visibleChats = showHidden
+    ? hiddenChats
+    : showArchived
+      ? archivedChats
+      : activeChats;
+  const smartGrouped = useMemo(
+    () => (smartOn && !showArchived ? smartGroup(visibleChats) : null),
+    [smartOn, showArchived, smartGroup, visibleChats],
+  );
+  const openChat = useCallback(
+    (chat: Chat) => {
+      try {
+        if (!chat?.id) {
+          Alert.alert('Chat', 'Chat inválido.');
+          return;
+        }
+        const other =
+          chat.participants?.find((p) => p.userId !== me?.id) ??
+          chat.participants?.find((p) => p.user?.id !== me?.id);
+        const contactName =
+          chat.type === 'group'
+            ? chat.name || 'Grupo'
+            : other?.user?.name ?? other?.user?.username ?? 'Chat';
+        const contactLanguage = other?.user?.preferredLanguage;
+        clearUnread(chat.id);
+        navigation.push('Chat', {
+          chatId: chat.id,
+          contactName,
+          contactLanguage,
+        });
+      } catch (err) {
+        Alert.alert(
+          'No se pudo abrir',
+          err instanceof Error ? err.message : 'Error desconocido',
+        );
+      }
+    },
+    [me, navigation, clearUnread],
+  );
+
+  const findDemoEnglish = useCallback((): Chat | undefined => {
+    return chats.find((c) =>
+      c.participants?.some(
+        (p) =>
+          p.userId !== me?.id &&
+          (p.user?.username === 'demo_en' ||
+            (p.user?.name || '').toLowerCase().includes('english')),
+      ),
+    );
+  }, [chats, me]);
+
+  const openDemoEnglish = useCallback(() => {
+    const demo = findDemoEnglish();
+    if (demo) {
+      openChat(demo);
+      return;
+    }
+    navigation.push('NewChat');
+  }, [findDemoEnglish, openChat, navigation]);
 
   const onRefresh = useCallback(() => {
     void fetchChats();
   }, [fetchChats]);
 
-  const openChat = useCallback(
-    (chat: Chat) => {
-      const other = chat.participants.find((p) => p.userId !== me?.id);
-      const contactName = other?.user.name ?? 'Chat';
-      const contactLanguage = other?.user.preferredLanguage;
-      clearUnread(chat.id);
-      navigation.navigate('Chat', {
-        chatId: chat.id,
-        contactName,
-        contactLanguage,
-      });
-    },
-    [me, navigation, clearUnread],
-  );
-
-  const openSettings = useCallback(() => {
-    navigation.navigate('Settings');
-  }, [navigation]);
-
-  const startNewChat = useCallback(() => {
-    navigation.navigate('NewChat');
-  }, [navigation]);
-
-  const renderItem: ListRenderItem<Chat> = useCallback(
-    ({ item }) => {
-      const other = item.participants.find((p) => p.userId !== me?.id);
-      const contactName = other?.user.name ?? 'Unknown';
-      const preview = item.lastMessage?.text ?? 'No messages yet';
-      const unread = unreadByChat[item.id] ?? 0;
-
-      return (
-        <Pressable
-          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-          onPress={() => openChat(item)}
-        >
-          <UserAvatar name={contactName} size={48} />
-          <View style={styles.rowMain}>
-            <View style={styles.rowHeader}>
-              <Text style={styles.contactName} numberOfLines={1}>
-                {contactName}
-              </Text>
-              <Text style={styles.timestamp}>
-                {formatPreviewTime(item.lastMessage?.createdAt ?? item.updatedAt)}
-              </Text>
-            </View>
-            <View style={styles.rowFooter}>
-              <Text
-                style={[styles.preview, unread > 0 && styles.previewUnread]}
-                numberOfLines={1}
-              >
-                {preview}
-              </Text>
-              {unread > 0 ? (
-                <View style={styles.unreadBadge}>
-                  <Text style={styles.unreadText}>
-                    {unread > 99 ? '99+' : unread}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-          </View>
-        </Pressable>
-      );
-    },
-    [me, unreadByChat, openChat],
-  );
-
-  const list = useMemo(() => chats, [chats]);
-
   return (
-    <View style={styles.container}>
+    <View style={styles.container} collapsable={false}>
       <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
-        <Text style={styles.headerTitle}>Synapmsg</Text>
-        <Pressable onPress={openSettings} hitSlop={12} style={styles.iconBtn}>
-          <Feather name="settings" size={22} color={colors.textPrimary} />
-        </Pressable>
+        <View style={styles.brandRow}>
+          <Image
+            source={require('../../assets/logo.png')}
+            style={styles.brandLogo}
+            accessibilityLabel="Synap"
+          />
+          <Text style={styles.headerTitle}>Synap</Text>
+          <View
+            style={[
+              styles.planChip,
+              me?.plan === 'premium' ? styles.planChipPremium : null,
+            ]}
+          >
+            <Text style={styles.planChipText}>
+              {me?.plan === 'premium' ? 'Premium' : 'Gratis'}
+            </Text>
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 4 }}>
+          {hiddenIds.length > 0 ? (
+            <Pressable
+              onPress={() => {
+                if (hiddenUnlocked && showHidden) {
+                  setShowHidden(false);
+                  lockHidden();
+                  return;
+                }
+                if (hiddenUnlocked) {
+                  setShowHidden(true);
+                  return;
+                }
+                setPinDraft('');
+                setPinOpen(true);
+              }}
+              hitSlop={12}
+              style={styles.iconBtn}
+              accessibilityLabel="Chats ocultos"
+            >
+              <Feather
+                name={showHidden ? 'eye' : 'eye-off'}
+                size={22}
+                color={showHidden ? colors.accent : colors.textPrimary}
+              />
+            </Pressable>
+          ) : null}
+          <Pressable
+            onPress={() => navigation.push('Settings')}
+            hitSlop={16}
+            style={styles.iconBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Ajustes"
+          >
+            <Feather name="settings" size={22} color={colors.textPrimary} />
+          </Pressable>
+        </View>
       </View>
 
-      <FlatList
-        data={list}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
+      <Pressable
+        style={styles.demoBanner}
+        onPress={() => navigation.push('Settings')}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel="Abrir seguridad en Ajustes"
+      >
+        <Text style={styles.demoBannerTitle}>Seguridad absoluta activa</Text>
+        <Text style={styles.demoBannerSub}>
+          E2E · Private Number · wipe · PIN de coacción — tocá para Ajustes
+        </Text>
+      </Pressable>
+
+      {archivedChats.length > 0 && !showHidden ? (
+        <Pressable
+          style={styles.archiveToggle}
+          onPress={() => setShowArchived((v) => !v)}
+        >
+          <Feather
+            name="archive"
+            size={16}
+            color={colors.textSecondary}
+          />
+          <Text style={styles.archiveToggleText}>
+            {showArchived
+              ? 'Ver chats'
+              : `Archivados (${archivedChats.length})`}
+          </Text>
+        </Pressable>
+      ) : null}
+      {showHidden ? (
+        <View style={styles.archiveToggle}>
+          <Feather name="eye-off" size={16} color={colors.accent} />
+          <Text style={[styles.archiveToggleText, { color: colors.accent }]}>
+            Chats ocultos ({hiddenChats.length})
+          </Text>
+        </View>
+      ) : null}
+
+      <Modal visible={pinOpen} transparent animationType="fade">
+        <Pressable
+          style={styles.pinOverlay}
+          onPress={() => setPinOpen(false)}
+        >
+          <Pressable
+            style={styles.pinCard}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.pinTitle}>Chats ocultos</Text>
+            <Text style={styles.pinSub}>Ingresá tu PIN de app</Text>
+            <TextInput
+              value={pinDraft}
+              onChangeText={(t) => setPinDraft(t.replace(/\D/g, '').slice(0, 8))}
+              secureTextEntry
+              keyboardType="number-pad"
+              style={styles.pinInput}
+              placeholder="PIN"
+              placeholderTextColor={colors.textSecondary}
+              maxLength={8}
+            />
+            <Pressable
+              style={styles.pinBtn}
+              onPress={() => {
+                void (async () => {
+                  const ok = await unlockHidden(pinDraft);
+                  if (!ok) {
+                    Alert.alert('PIN', 'PIN incorrecto.');
+                    return;
+                  }
+                  setPinOpen(false);
+                  setShowHidden(true);
+                  setPinDraft('');
+                })();
+              }}
+            >
+              <Text style={styles.pinBtnText}>Abrir</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <ScrollView
+        style={styles.scroll}
         contentContainerStyle={[
           styles.list,
-          list.length === 0 && styles.emptyList,
-          { paddingBottom: insets.bottom + 80 },
+          visibleChats.length === 0 && styles.emptyList,
+          { paddingBottom: insets.bottom + 140 },
         ]}
+        keyboardShouldPersistTaps="handled"
         refreshControl={
           <RefreshControl
             refreshing={isLoading}
@@ -164,34 +308,260 @@ export function ChatListScreen(): JSX.Element {
             colors={[colors.accent]}
           />
         }
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-        ListEmptyComponent={
+      >
+        {visibleChats.length === 0 ? (
           <EmptyState
             icon="message-square"
-            title="No chats yet"
-            subtitle="Tap + to start a conversation!"
+            title={showArchived ? 'Sin archivados' : 'Sin chats todavía'}
+            subtitle={
+              showArchived
+                ? 'Los chats archivados aparecen aquí.'
+                : 'Toca + y busca demo_en para probar chat + traducción.'
+            }
           />
-        }
-      />
+        ) : smartGrouped ? (
+          (
+            [
+              ['urgente', 'Urgente'],
+              ['trabajo', 'Trabajo'],
+              ['personal', 'Personal'],
+              ['otros', 'Otros'],
+            ] as const
+          ).map(([id, label]) => {
+            const items = smartGrouped[id];
+            if (!items.length) return null;
+            return (
+              <View key={id}>
+                <Text style={styles.smartHeader}>{label}</Text>
+                {items.map((item) => {
+                  const other =
+                    item.participants?.find((p) => p.userId !== me?.id) ??
+                    item.participants?.find((p) => p.user?.id !== me?.id);
+                  const isGroup = item.type === 'group';
+                  const contactName = isGroup
+                    ? item.name || 'Grupo'
+                    : other?.user?.name ?? other?.user?.username ?? 'Unknown';
+                  const preview = item.lastMessage?.text ?? 'Sin mensajes';
+                  const unread = unreadByChat[item.id] ?? 0;
+                  return (
+                    <Pressable
+                      key={item.id}
+                      style={({ pressed }) => [
+                        styles.row,
+                        pressed && styles.rowPressed,
+                      ]}
+                      onPress={() => openChat(item)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Abrir chat con ${contactName}`}
+                      hitSlop={4}
+                    >
+                      <UserAvatar name={contactName} size={48} />
+                      <View style={styles.rowMain}>
+                        <View style={styles.rowHeader}>
+                          <Text style={styles.contactName} numberOfLines={1}>
+                            {isGroup ? `👥 ${contactName}` : contactName}
+                          </Text>
+                          <Text style={styles.timestamp}>
+                            {formatPreviewTime(
+                              item.lastMessage?.createdAt ?? item.updatedAt,
+                            )}
+                          </Text>
+                        </View>
+                        <View style={styles.rowFooter}>
+                          <Text
+                            style={[
+                              styles.preview,
+                              unread > 0 && styles.previewUnread,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {preview}
+                          </Text>
+                          {unread > 0 ? (
+                            <View style={styles.unreadBadge}>
+                              <Text style={styles.unreadText}>
+                                {unread > 99 ? '99+' : unread}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            );
+          })
+        ) : (
+          visibleChats.map((item) => {
+            const other =
+              item.participants?.find((p) => p.userId !== me?.id) ??
+              item.participants?.find((p) => p.user?.id !== me?.id);
+            const isGroup = item.type === 'group';
+            const contactName = isGroup
+              ? item.name || 'Grupo'
+              : other?.user?.name ?? other?.user?.username ?? 'Unknown';
+            const preview = item.lastMessage?.text ?? 'Sin mensajes';
+            const unread = unreadByChat[item.id] ?? 0;
+
+            return (
+              <Pressable
+                key={item.id}
+                style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+                onPress={() => openChat(item)}
+                onLongPress={() => {
+                  if (!showArchived) return;
+                  toggleArchive(item.id);
+                  Alert.alert('Desarchivado', `${contactName} volvió a Chats.`);
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Abrir chat con ${contactName}`}
+                hitSlop={4}
+              >
+                <UserAvatar name={contactName} size={48} />
+                <View style={styles.rowMain}>
+                  <View style={styles.rowHeader}>
+                    <Text style={styles.contactName} numberOfLines={1}>
+                      {isGroup ? `👥 ${contactName}` : contactName}
+                    </Text>
+                    <Text style={styles.timestamp}>
+                      {formatPreviewTime(
+                        item.lastMessage?.createdAt ?? item.updatedAt,
+                      )}
+                    </Text>
+                  </View>
+                  <View style={styles.rowFooter}>
+                    <Text
+                      style={[styles.preview, unread > 0 && styles.previewUnread]}
+                      numberOfLines={1}
+                    >
+                      {preview}
+                    </Text>
+                    {unread > 0 ? (
+                      <View style={styles.unreadBadge}>
+                        <Text style={styles.unreadText}>
+                          {unread > 99 ? '99+' : unread}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+              </Pressable>
+            );
+          })
+        )}
+      </ScrollView>
 
       <Pressable
-        style={({ pressed }) => [
-          styles.fab,
-          pressed && styles.fabPressed,
-          { bottom: insets.bottom + spacing.xl },
-        ]}
-        onPress={startNewChat}
+        style={[styles.fabSecondary, { bottom: insets.bottom + 140 }]}
+        onPress={() => navigation.push('NewGroup')}
+        accessibilityRole="button"
+        accessibilityLabel="Nuevo grupo"
+        hitSlop={12}
+      >
+        <Feather name="users" size={22} color={colors.textInverse} />
+      </Pressable>
+      <Pressable
+        style={[styles.fab, { bottom: insets.bottom + 72 }]}
+        onPress={() => navigation.push('NewChat')}
         accessibilityRole="button"
         accessibilityLabel="Start new chat"
+        hitSlop={12}
       >
         <Feather name="plus" size={26} color={colors.textInverse} />
       </Pressable>
+
+      {/* Barra inferior estilo WhatsApp */}
+      <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
+        <Pressable style={styles.tabItem} onPress={() => { /* ya en chats */ }}>
+          <Feather name="message-circle" size={22} color={colors.accent} />
+          <Text style={[styles.tabLabel, styles.tabLabelActive]}>Chats</Text>
+        </Pressable>
+        <Pressable
+          style={styles.tabItem}
+          onPress={() => navigation.push('Contacts')}
+          accessibilityRole="button"
+          accessibilityLabel="Contactos"
+        >
+          <Feather name="users" size={22} color={colors.textSecondary} />
+          <Text style={styles.tabLabel}>Contactos</Text>
+        </Pressable>
+        <Pressable
+          style={styles.tabItem}
+          onPress={() => navigation.push('Tools')}
+          accessibilityRole="button"
+          accessibilityLabel="Herramientas"
+        >
+          <Feather name="grid" size={22} color={colors.textSecondary} />
+          <Text style={styles.tabLabel}>Herramientas</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  archiveToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  archiveToggleText: {
+    color: colors.textSecondary,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.medium,
+  },
+  pinOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    padding: spacing.xxl,
+  },
+  pinCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.xl,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  pinTitle: {
+    color: colors.textPrimary,
+    fontSize: fontSize.title,
+    fontWeight: fontWeight.bold,
+    marginBottom: spacing.sm,
+  },
+  pinSub: {
+    color: colors.textSecondary,
+    fontSize: fontSize.caption,
+    marginBottom: spacing.lg,
+  },
+  pinInput: {
+    backgroundColor: colors.background,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    color: colors.textPrimary,
+    fontSize: 18,
+    marginBottom: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  pinBtn: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  pinBtnText: {
+    color: colors.textInverse,
+    fontWeight: fontWeight.semibold,
+    fontSize: fontSize.body,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -199,14 +569,74 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.md,
     backgroundColor: colors.background,
+    zIndex: 2,
+  },
+  brandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  brandLogo: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    marginRight: spacing.sm,
+  },
+  smartHeader: {
+    color: colors.accent,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.semibold,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
   headerTitle: {
-    color: colors.textPrimary,
+    color: colors.chatNeon,
     fontSize: fontSize.h2,
     fontWeight: fontWeight.bold,
     letterSpacing: -0.5,
   },
+  planChip: {
+    marginLeft: spacing.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  planChipPremium: {
+    backgroundColor: 'rgba(48,176,176,0.18)',
+    borderColor: colors.accent,
+  },
+  planChipText: {
+    color: colors.textSecondary,
+    fontSize: 11,
+    fontWeight: fontWeight.semibold,
+  },
   iconBtn: { padding: spacing.xs },
+  demoBanner: {
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.lg,
+    backgroundColor: colors.accent,
+    zIndex: 2,
+  },
+  demoBannerTitle: {
+    color: colors.textInverse,
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.bold,
+  },
+  demoBannerSub: {
+    color: colors.textInverse,
+    opacity: 0.85,
+    fontSize: fontSize.caption,
+    marginTop: spacing.xs,
+  },
+  scroll: { flex: 1 },
   list: { paddingHorizontal: spacing.md },
   emptyList: { flexGrow: 1 },
   row: {
@@ -215,6 +645,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.md,
     backgroundColor: colors.background,
+    minHeight: 76,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   rowPressed: { backgroundColor: colors.ripple },
   rowMain: {
@@ -227,14 +660,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   contactName: {
-    color: colors.textPrimary,
+    color: colors.chatNeon,
     fontSize: fontSize.bodyLg,
     fontWeight: fontWeight.semibold,
     flex: 1,
     marginRight: spacing.sm,
   },
   timestamp: {
-    color: colors.textSecondary,
+    color: colors.chatNeonDim,
     fontSize: fontSize.caption,
   },
   rowFooter: {
@@ -244,13 +677,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   preview: {
-    color: colors.textSecondary,
+    color: colors.chatNeonDim,
     fontSize: fontSize.body,
     flex: 1,
     marginRight: spacing.sm,
   },
   previewUnread: {
-    color: colors.textPrimary,
+    color: colors.chatNeon,
     fontWeight: fontWeight.medium,
   },
   unreadBadge: {
@@ -267,11 +700,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.caption,
     fontWeight: fontWeight.bold,
   },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border,
-    marginHorizontal: spacing.md + 48 + spacing.md,
-  },
   fab: {
     position: 'absolute',
     right: spacing.xl,
@@ -281,13 +709,48 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: colors.primary,
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    elevation: 6,
+    zIndex: 5,
   },
-  fabPressed: { opacity: 0.85 },
+  fabSecondary: {
+    position: 'absolute',
+    right: spacing.xl,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.accentDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+    zIndex: 5,
+  },
+  tabBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+    paddingTop: 8,
+    zIndex: 6,
+  },
+  tabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 6,
+  },
+  tabLabel: {
+    marginTop: 2,
+    fontSize: 11,
+    color: colors.textSecondary,
+  },
+  tabLabelActive: {
+    color: colors.accent,
+    fontWeight: fontWeight.semibold,
+  },
 });
 
 export default ChatListScreen;

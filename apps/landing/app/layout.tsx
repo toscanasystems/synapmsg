@@ -2,32 +2,32 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Synapmsg — Mensajería cifrada con traducción nativa",
+  title: "Synap — Mensajería con seguridad absoluta",
   description:
-    "La app de mensajería más segura del mundo. Escribe en tu idioma, el destinatario recibe en el suyo. Cifrado extremo a extremo, traducción en tiempo real, sin anuncios.",
+    "La mensajería más segura: cifrado extremo a extremo, Private Number sin SIM, wipe remoto, PIN de coacción y defensa post-cuántica. Disponible en todo el mundo.",
   keywords: [
     "mensajería",
     "chat",
     "cifrado",
-    "traducción",
+    "seguridad",
     "privacidad",
-    "LatAm",
-    "Synapmsg",
+    "E2E",
+    "Synap",
   ],
   authors: [{ name: "Toscana Systems, S.A." }],
   openGraph: {
-    title: "Synapmsg — Mensajería cifrada con traducción nativa",
+    title: "Synap — Mensajería con seguridad absoluta",
     description:
-      "Escribe en tu idioma, el destinatario recibe en el suyo. Cifrado E2E, traducción en tiempo real.",
+      "E2E, Private Number sin SIM, wipe remoto y post-cuántica. Para el mundo entero.",
     type: "website",
-    url: "https://synapmsg.com",
-    siteName: "Synapmsg",
+    url: "https://synapmsg.ai",
+    siteName: "Synap",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Synapmsg",
+    title: "Synap",
     description:
-      "Mensajería cifrada con traducción nativa. Escribe en tu idioma, el destinatario recibe en el suyo.",
+      "Mensajería con seguridad absoluta. Cifrado E2E, sin SIM, wipe remoto.",
   },
   robots: { index: true, follow: true },
   viewport: "width=device-width, initial-scale=1, maximum-scale=5",

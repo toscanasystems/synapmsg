@@ -1,4 +1,4 @@
-/**
+﻿/**
  * UserAvatar — circular avatar with the user's initials on a deterministic
  * tinted background (no network image required).
  *
@@ -39,7 +39,7 @@ function getInitials(name: string): string {
 
 function UserAvatarComponent({ name, size = 44 }: UserAvatarProps): JSX.Element {
   const initials = getInitials(name || '?');
-  const tint = avatarPalette[hashString(name || 'Synapmsg') % avatarPalette.length];
+  const tint = avatarPalette[hashString(name || 'Synap') % avatarPalette.length];
   const dynamicStyles = StyleSheet.create({
     circle: {
       width: size,

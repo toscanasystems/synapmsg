@@ -1,134 +1,145 @@
 # Synapmsg
 
-> Mensajería cifrada con traducción nativa para LatAm.
+Mensajería con **seguridad absoluta** y **traducción nativa**.  
+Escribes en tu idioma; el destinatario lee en el suyo. E2E, metadata mínima, freemium sin anuncios en Premium.
 
-Escribe en tu idioma. El destinatario recibe en el suyo. Cifrado extremo a extremo, traducción en tiempo real, sin anuncios.
+| | |
+|---|---|
+| Empresa | Toscana Systems, S.A. |
+| Brand teal | `#30B0B0` |
+| Norte | [`SYNAPMSG_NORTE.md`](./SYNAPMSG_NORTE.md) · [`docs/comparativa-synapmsg-norte.pdf`](./docs/comparativa-synapmsg-norte.pdf) |
+| Cursor | [`.cursorrules`](./.cursorrules) · [`.cursor-prompts.md`](./.cursor-prompts.md) |
+| Seguridad | [`SECURITY.md`](./SECURITY.md) |
+| Licencia objetivo | AGPL-3.0 |
 
-## Estructura del monorepo
+## Monorepo (vivo)
 
 ```
 synapmsg/
 ├── apps/
-│   ├── api/          # Backend Node.js + Express + Prisma + WebSocket
-│   ├── mobile/       # App móvil React Native + Expo
-│   └── landing/      # Landing page Next.js + Tailwind
-├── packages/
-│   └── shared/       # Tipos y utilidades compartidas (próximamente)
-└── package.json      # Workspace root
+│   ├── api/            # Express + Prisma + WebSocket (Railway → api.synapmsg.ai)
+│   ├── mobile/         # React Native + Expo 51 (APK release)
+│   ├── landing/        # Next.js (Cloudflare Pages → synapmsg.ai)
+│   └── media-worker/   # Cloudflare Worker + R2
+├── docs/               # Arquitectura, handoff, comparativa norte
+├── docker-compose.yml  # Postgres + Redis + MinIO (dev local)
+├── .env.example
+├── .cursorrules
+└── .cursor-prompts.md
 ```
 
-## Stack técnico
+> **No** reemplazar este árbol con `create-turbo` en caliente. Nuevos packages son aditivos.
 
-| Componente | Tecnología |
+## Requisitos previos
+
+| Tool | Notas |
 |---|---|
-| Backend | Node.js 20, Express 4, Prisma 5, WebSocket (ws) |
-| Base de datos | PostgreSQL (Supabase) |
-| App móvil | React Native 0.74, Expo SDK 51 |
-| Landing page | Next.js 14, Tailwind CSS 3 |
-| Auth | JWT + bcrypt |
-| Traducción | DeepL API + Whisper.cpp (on-device, v1.1) |
-| Cifrado | Signal Protocol (libsignal, v1.1) — libsodium básico en v1 |
-| Hosting | Railway (backend), Vercel (landing), Cloudflare R2 (archivos) |
+| Node.js ≥ 20 (22 OK) | API + landing + Expo |
+| npm | Workspaces actuales |
+| Docker Desktop | Opcional para `docker compose up` |
+| Android SDK / JDK 17 | Builds APK locales |
+| Xcode | Solo si trabajás iOS |
+| Rust / pnpm / Tauri | Roadmap desktop (Fase 5), no bloquea MVP |
 
-## Setup rápido (desarrollo local)
+## Setup rápido
 
-### 1. Backend
+### 1) Clonar e instalar
 
 ```bash
-cd apps/api
-cp .env.example .env
-# Editar .env con:
-#   DATABASE_URL=postgresql://... (Supabase)
-#   JWT_SECRET=tu-secreto-super-largo
-#   DEEPL_API_KEY=tu-key-deepl
-
+git clone <repo> synapmsg
+cd synapmsg
 npm install
-npx prisma db push      # Crear tablas en la DB
-npm run dev             # http://localhost:3000
 ```
 
-### 2. App móvil
+### 2) Variables de entorno
+
+```bash
+cp .env.example .env
+cp apps/api/.env.example apps/api/.env
+# Completar DATABASE_URL, JWT_SECRET, DEEPL_API_KEY, etc.
+```
+
+### 3) Infra local (opcional)
+
+```bash
+docker compose up -d
+# Postgres :5432  Redis :6379  MinIO :9000 (console :9001)
+```
+
+### 4) Base de datos
+
+```bash
+npm run db:push
+# o: cd apps/api && npx prisma db push
+```
+
+### 5) API
+
+```bash
+npm run dev:api
+# http://localhost:3000/health
+```
+
+### 6) Landing
+
+```bash
+npm run dev:landing
+```
+
+### 7) Mobile
 
 ```bash
 cd apps/mobile
 npm install
-
-# Configurar URL del backend (en app.json o .env):
-echo 'EXPO_PUBLIC_API_URL=http://TU_IP_LOCAL:3000' > .env
-
-npx expo start          # Escanea QR con Expo Go
+# EXPO_PUBLIC_API_URL / EXPO_PUBLIC_WS_URL apuntando a tu API
+npx expo start
 ```
 
-### 3. Landing page
+### 8) Producción (referencia)
 
-```bash
-cd apps/landing
-npm install
-npm run dev             # http://localhost:3001
-```
+| App | Host |
+|---|---|
+| API | Railway (`railway up` desde `apps/api`) · https://api.synapmsg.ai |
+| Landing | Cloudflare Pages |
+| Media | Worker `apps/media-worker` + R2 |
+| Mobile APK | `gradlew assembleRelease` (pipeline en `C:\build\synapmsg\...`) |
 
-## API Endpoints
+Detalle operativo: `docs/HANDOFF-PROGRAMADOR-9AM.md`, `DEPLOY.md`.
 
-```
-POST   /auth/register       — Registrar nuevo usuario
-POST   /auth/login          — Iniciar sesión
-GET    /auth/me             — Usuario actual (auth)
+## Comandos principales
 
-GET    /users/search?q=     — Buscar usuarios (auth)
-GET    /users/:id           — Obtener usuario (auth)
-PATCH  /users/me            — Actualizar perfil (auth)
+| Comando | Qué hace |
+|---|---|
+| `npm run dev:api` | API en watch |
+| `npm run dev:landing` | Landing Next |
+| `npm run dev:mobile` | Expo |
+| `npm run db:push` | Prisma push |
+| `npm run db:studio` | Prisma Studio |
+| `npm run build:api` | Compile API |
 
-GET    /chats               — Listar chats del usuario (auth)
-POST   /chats               — Crear chat 1-a-1 (auth)
-GET    /chats/:id           — Detalle del chat (auth)
+## Seguridad (resumen)
 
-GET    /chats/:id/messages  — Listar mensajes (auth)
-POST   /chats/:id/messages  — Enviar mensaje + traducir (auth)
+Reglas no negociables en [`SECURITY.md`](./SECURITY.md):
 
-WS     /ws?token=JWT        — Tiempo real
-GET    /health              — Health check
-```
+- Chats **Privado E2E**: el servidor no ve plaintext.
+- Keys en enclave / store cifrado; nunca en logs ni repos.
+- Respuesta a autoridades **solo con orden judicial estricta** y metadata mínima.
+- Bug bounty: reportes a `support@synapmsg.ai` (política completa en SECURITY.md).
 
-## Bundle ID
+## Roadmap 24 semanas
 
-- iOS / Android: `com.synapmsg.app`
-- Empresa: Toscana Systems, S.A.
-- Dominio: synapmsg.com
+| Semanas | Fase | Foco |
+|---|---|---|
+| 1–2 | 0 | Fundación / CI / docs / teal |
+| 3–6 | 1 | E2E libsignal + store cifrado |
+| 7–12 | 2.x | Wipe, duress, PQ, KTL, DMS, enclave, FIDO2 |
+| 13–16 | 3 | Traducción cloud + on-device |
+| 17–20 | 4 | UX IA |
+| 21–22 | 5 | Ecosistema |
+| 23–24 | 6 | Lanzamiento / AGPL / bounty |
 
-## Roadmap
-
-### v1.0 (Beta privada, días 1-2)
-- ✅ Auth email/password
-- ✅ Chat 1-a-1 con texto
-- ✅ Tiempo real vía WebSocket
-- ✅ Traducción con DeepL API (modo nube)
-- ✅ Cifrado básico E2E (libsodium)
-- ✅ Landing page con captura de email
-
-### v1.1 (Semana 2-3)
-- Auth por SMS OTP (Twilio)
-- Multimedia (fotos, videos, archivos hasta 4GB)
-- Grupos pequeños (≤50 miembros)
-- Signal Protocol completo (perfect forward secrecy)
-- Multidispositivo sincronizado
-
-### v1.2 (Mes 2)
-- Traducción on-device (Whisper.cpp)
-- Mensajes temporales
-- Edición de mensajes (48h)
-- Stickers y GIFs
-
-### v2.0 (Mes 3+)
-- Grupos masivos (200k)
-- Canales de difusión
-- Bot API pública
-- Pagos P2P nativos
-- Mini-programas
-
-## Empresa
-
-**Toscana Systems, S.A.** — Guatemala
+Prompts listos: [`.cursor-prompts.md`](./.cursor-prompts.md).
 
 ## Licencia
 
-Propietaria. Todos los derechos reservados.
+Objetivo **AGPL-3.0** (cliente + servidor). SaaS que modifique y ofrezca el software en red debe publicar cambios bajo AGPL. Hasta publicar LICENSE formal, el código permanece privado del equipo Toscana Systems.

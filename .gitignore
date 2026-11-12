@@ -17,11 +17,20 @@ out/
 build/
 dist/
 
-# Environment variables
+# Environment variables / secrets
 .env
+**/.env
 .env.deploy
+**/.env.deploy
 .env.local
+**/.env.local
 .env.*.local
+**/.env.*.local
+# Keep templates (placeholders only — never real keys)
+!.env.example
+!**/.env.example
+!.env.deploy.example
+!**/.env.*.example
 apps/api/.wrangler/
 
 # IDE
@@ -59,3 +68,19 @@ coverage/
 # Temporary
 tmp/
 temp/
+
+# QA secrets / local APKs / debug signing / Firebase
+apps/mobile/scripts/qa-secrets.local.ps1
+apps/mobile/scripts/*.local.json
+*.local.json
+*.local.ps1
+*.apk
+*.jks
+*.keystore
+apps/mobile/android/app/debug.keystore
+**/google-services.json
+**/GoogleService-Info.plist
+**/credentials.json
+**/*credentials*.json
+*.pem
+*.p12

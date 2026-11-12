@@ -24,6 +24,13 @@ export const colors = {
   textMuted: '#606060',         // Gris medio para texto deshabilitado
   textInverse: '#000000',      // Negro sobre fondos claros
 
+  // Chat — tipografía verde fluorescente (elegante / terminal)
+  chatNeon: '#39FF14',         // Verde fluorescente mensajes
+  chatNeonDim: 'rgba(57, 255, 20, 0.55)', // Meta / timestamps
+  chatBubbleMine: 'rgba(57, 255, 20, 0.08)',
+  chatBubbleTheirs: 'rgba(26, 26, 26, 0.92)',
+  chatBubbleBorder: 'rgba(57, 255, 20, 0.28)',
+
   // Status
   success: '#3CB371',          // Verde menta (mantiene semántica)
   error: '#E57373',             // Rojo suave (legible sobre negro)

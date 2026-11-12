@@ -1,29 +1,13 @@
 /**
- * RegisterScreen — sign-up form.
- *
- * Fields:
- *   Name, Email, Username (with @ prefix), Password, Confirm Password
- *   Preferred Language dropdown
- *
- * Validation:
- *   • All required fields present
- *   • Email format
- *   • Password ≥ 6 chars, matches confirm
- *   • Username trimmed
- *
- * On success → auth store sets the token → App.tsx redirects to ChatList.
+ * Register — crear cuenta (UI limpia, español).
  */
 
 import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
-  TextInput,
   Pressable,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
   Modal,
   FlatList,
 } from 'react-native';
@@ -31,9 +15,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
+import { useAuthStore } from '../store/auth';
+import { mapAuthError } from '../api/authErrors';
+import { AuthField, AuthPasswordToggle } from '../components/auth/AuthField';
+import {
+  AuthScreen,
+  AuthPrimaryButton,
+  AuthLinkRow,
+} from '../components/auth/AuthScreen';
 import colors from '../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
-import { useAuthStore } from '../store/auth';
 import { LANGUAGES, LanguageCode, RootStackParamList } from '../types';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -58,23 +49,41 @@ export function RegisterScreen(): JSX.Element {
     useState<LanguageCode>('es');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [usernameTouched, setUsernameTouched] = useState(false);
 
   const error = localError ?? storeError;
+  const selectedLang =
+    LANGUAGES.find((l) => l.code === preferredLanguage) ?? LANGUAGES[0]!;
 
-  const handleSubmit = useCallback(async () => {
+  const clearMessages = useCallback(() => {
     setLocalError(null);
     clearError();
+  }, [clearError]);
+
+  const handleSubmit = useCallback(async () => {
+    clearMessages();
 
     const cleanName = name.trim();
     const cleanEmail = email.trim().toLowerCase();
-    const cleanUsername = username.trim().replace(/^@/, '');
+    const cleanUsername = username.trim().replace(/^@/, '').toLowerCase();
     const cleanPassword = password;
 
-    if (!cleanName) return setLocalError('Name is required.');
-    if (!cleanUsername) return setLocalError('Username is required.');
-    if (!EMAIL_REGEX.test(cleanEmail)) return setLocalError('Enter a valid email address.');
-    if (cleanPassword.length < 6) return setLocalError('Password must be at least 6 characters.');
-    if (cleanPassword !== confirmPassword) return setLocalError('Passwords do not match.');
+    if (!cleanName) return setLocalError('Ingresá tu nombre.');
+    if (!EMAIL_REGEX.test(cleanEmail)) {
+      return setLocalError('Ingresá un correo válido.');
+    }
+    if (!cleanUsername) return setLocalError('Ingresá un nombre de usuario.');
+    if (!/^[a-z0-9_]{3,24}$/.test(cleanUsername)) {
+      return setLocalError(
+        'Usuario: 3–24 caracteres, solo letras, números y _.',
+      );
+    }
+    if (cleanPassword.length < 6) {
+      return setLocalError('La contraseña debe tener al menos 6 caracteres.');
+    }
+    if (cleanPassword !== confirmPassword) {
+      return setLocalError('La contraseña y la confirmación no coinciden.');
+    }
 
     try {
       await register({
@@ -84,193 +93,173 @@ export function RegisterScreen(): JSX.Element {
         password: cleanPassword,
         preferredLanguage,
       });
-      // App.tsx watches auth.token — navigation handled there.
-    } catch {
-      // store error already populated
+    } catch (err) {
+      setLocalError(mapAuthError(err));
     }
-  }, [name, email, username, password, confirmPassword, preferredLanguage, register, clearError]);
-
-  const goToLogin = () => navigation.replace('Login');
-
-  const selectedLang = LANGUAGES.find((l) => l.code === preferredLanguage)!;
+  }, [
+    name,
+    email,
+    username,
+    password,
+    confirmPassword,
+    preferredLanguage,
+    register,
+    clearMessages,
+  ]);
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          {
-            paddingTop: insets.top + spacing.xxl,
-            paddingBottom: insets.bottom + spacing.xxxl,
-          },
-        ]}
-        keyboardShouldPersistTaps="handled"
+    <>
+      <AuthScreen
+        title="Crear cuenta"
+        subtitle="Gratis. Sin anuncios molestos en el registro."
+        showBrand={false}
+        onBack={() => navigation.replace('Login')}
+        error={error}
+        onDismissError={clearMessages}
+        footer={
+          <AuthLinkRow
+            prompt="¿Ya tenés cuenta?"
+            action="Iniciar sesión"
+            onPress={() => navigation.replace('Login')}
+          />
+        }
       >
-        <View style={styles.headerWrap}>
-          <Pressable onPress={goToLogin} hitSlop={8} style={styles.backBtn}>
-            <Feather name="arrow-left" size={22} color={colors.textPrimary} />
-          </Pressable>
-          <Text style={styles.title}>Create your account</Text>
-        </View>
+        <AuthField
+          label="Nombre"
+          icon="user"
+          value={name}
+          onChangeText={(t) => {
+            setName(t);
+            clearMessages();
+          }}
+          placeholder="Tu nombre"
+          autoCapitalize="words"
+          textContentType="name"
+          editable={!isLoading}
+        />
 
-        <View style={styles.form}>
-          {/* Name */}
-          <View style={styles.field}>
-            <Feather name="user" size={18} color={colors.textSecondary} style={styles.fieldIcon} />
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder="Full name"
-              placeholderTextColor={colors.textSecondary}
-              autoCapitalize="words"
-              textContentType="name"
-              style={styles.input}
-              editable={!isLoading}
+        <AuthField
+          label="Correo"
+          icon="mail"
+          value={email}
+          onChangeText={(t) => {
+            setEmail(t);
+            clearMessages();
+            if (!usernameTouched) {
+              const local = t.trim().split('@')[0] || '';
+              setUsername(
+                local
+                  .toLowerCase()
+                  .replace(/[^a-z0-9_]/g, '')
+                  .slice(0, 24),
+              );
+            }
+          }}
+          placeholder="tu@correo.com"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          autoCorrect={false}
+          textContentType="emailAddress"
+          editable={!isLoading}
+        />
+
+        <AuthField
+          label="Usuario"
+          prefix="@"
+          value={username}
+          onChangeText={(t) => {
+            setUsernameTouched(true);
+            setUsername(t.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24));
+            clearMessages();
+          }}
+          placeholder="usuario"
+          autoCapitalize="none"
+          autoCorrect={false}
+          textContentType="username"
+          editable={!isLoading}
+        />
+
+        <AuthField
+          label="Contraseña"
+          icon="lock"
+          value={password}
+          onChangeText={(t) => {
+            setPassword(t);
+            clearMessages();
+          }}
+          placeholder="Mínimo 6 caracteres"
+          secureTextEntry={!showPassword}
+          autoCapitalize="none"
+          autoCorrect={false}
+          textContentType="newPassword"
+          editable={!isLoading}
+          right={
+            <AuthPasswordToggle
+              visible={showPassword}
+              onToggle={() => setShowPassword((v) => !v)}
             />
-          </View>
+          }
+        />
 
-          {/* Email */}
-          <View style={styles.field}>
-            <Feather name="mail" size={18} color={colors.textSecondary} style={styles.fieldIcon} />
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Email"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="emailAddress"
-              style={styles.input}
-              editable={!isLoading}
-            />
-          </View>
+        <AuthField
+          label="Confirmar contraseña"
+          icon="lock"
+          value={confirmPassword}
+          onChangeText={(t) => {
+            setConfirmPassword(t);
+            clearMessages();
+          }}
+          placeholder="Repetí la contraseña"
+          secureTextEntry={!showPassword}
+          autoCapitalize="none"
+          autoCorrect={false}
+          textContentType="newPassword"
+          editable={!isLoading}
+        />
 
-          {/* Username */}
-          <View style={styles.field}>
-            <Text style={styles.atPrefix}>@</Text>
-            <TextInput
-              value={username}
-              onChangeText={setUsername}
-              placeholder="username"
-              placeholderTextColor={colors.textSecondary}
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="username"
-              style={styles.input}
-              editable={!isLoading}
-            />
-          </View>
+        <Text style={styles.langLabel}>Idioma de la app</Text>
+        <Pressable
+          style={styles.langField}
+          onPress={() => {
+            // Modal after press — no Alert race here
+            setPickerOpen(true);
+          }}
+          disabled={isLoading}
+        >
+          <Text style={styles.flag}>{selectedLang.flag}</Text>
+          <Text style={styles.langText}>{selectedLang.label}</Text>
+          <Feather name="chevron-down" size={18} color={colors.textSecondary} />
+        </Pressable>
 
-          {/* Password */}
-          <View style={styles.field}>
-            <Feather name="lock" size={18} color={colors.textSecondary} style={styles.fieldIcon} />
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Password (6+ characters)"
-              placeholderTextColor={colors.textSecondary}
-              secureTextEntry={!showPassword}
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="newPassword"
-              style={styles.input}
-              editable={!isLoading}
-            />
-            <Pressable
-              onPress={() => setShowPassword((v) => !v)}
-              hitSlop={8}
-              style={styles.eyeButton}
-            >
-              <Feather
-                name={showPassword ? 'eye-off' : 'eye'}
-                size={18}
-                color={colors.textSecondary}
-              />
-            </Pressable>
-          </View>
+        <AuthPrimaryButton
+          label="Crear cuenta"
+          loadingLabel="Creando…"
+          loading={isLoading}
+          onPress={() => {
+            void handleSubmit();
+          }}
+        />
+      </AuthScreen>
 
-          {/* Confirm password */}
-          <View style={styles.field}>
-            <Feather name="lock" size={18} color={colors.textSecondary} style={styles.fieldIcon} />
-            <TextInput
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholder="Confirm password"
-              placeholderTextColor={colors.textSecondary}
-              secureTextEntry={!showPassword}
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="newPassword"
-              style={styles.input}
-              editable={!isLoading}
-            />
-          </View>
-
-          {/* Preferred Language picker */}
-          <Pressable
-            style={styles.field}
-            onPress={() => setPickerOpen(true)}
-            disabled={isLoading}
-          >
-            <Text style={styles.flag}>{selectedLang.flag}</Text>
-            <Text style={styles.pickerLabel}>{selectedLang.label}</Text>
-            <Feather
-              name="chevron-down"
-              size={18}
-              color={colors.textSecondary}
-              style={styles.chevron}
-            />
-          </Pressable>
-
-          {error ? (
-            <View style={styles.errorBanner}>
-              <Feather name="alert-circle" size={16} color={colors.error} />
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : null}
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.submit,
-              pressed && styles.submitPressed,
-              isLoading && styles.submitDisabled,
-            ]}
-            onPress={handleSubmit}
-            disabled={isLoading}
-          >
-            <Text style={styles.submitText}>
-              {isLoading ? 'Creating account…' : 'Create Account'}
-            </Text>
-          </Pressable>
-
-          <Pressable onPress={goToLogin} hitSlop={8} style={styles.linkWrap}>
-            <Text style={styles.link}>
-              Already have an account?{' '}
-              <Text style={styles.linkBold}>Login</Text>
-            </Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-
-      {/* Language picker modal */}
       <Modal
         visible={pickerOpen}
         transparent
         animationType="slide"
         onRequestClose={() => setPickerOpen(false)}
       >
-        <Pressable style={styles.modalOverlay} onPress={() => setPickerOpen(false)}>
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setPickerOpen(false)}
+        >
           <Pressable
-            style={[styles.modalCard, { marginBottom: insets.bottom + spacing.md }]}
+            style={[
+              styles.modalCard,
+              { paddingBottom: insets.bottom + spacing.xl },
+            ]}
             onPress={(e) => e.stopPropagation()}
           >
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select your language</Text>
-            </View>
+            <View style={styles.modalGrab} />
+            <Text style={styles.modalTitle}>Elegí tu idioma</Text>
             <FlatList
               data={LANGUAGES}
               keyExtractor={(item) => item.code}
@@ -278,7 +267,7 @@ export function RegisterScreen(): JSX.Element {
                 <Pressable
                   style={[
                     styles.optionRow,
-                    item.code === preferredLanguage && styles.optionRowActive,
+                    item.code === preferredLanguage && styles.optionActive,
                   ]}
                   onPress={() => {
                     setPreferredLanguage(item.code);
@@ -296,97 +285,35 @@ export function RegisterScreen(): JSX.Element {
           </Pressable>
         </Pressable>
       </Modal>
-    </KeyboardAvoidingView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
-  scroll: { flexGrow: 1, paddingHorizontal: spacing.xxl },
-  headerWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.xxl,
-  },
-  backBtn: { padding: spacing.xs },
-  title: {
-    color: colors.textPrimary,
-    fontSize: fontSize.h2,
-    fontWeight: fontWeight.bold,
-  },
-  form: { width: '100%' },
-  field: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  fieldIcon: { marginRight: spacing.md },
-  atPrefix: {
+  langLabel: {
     color: colors.textSecondary,
-    fontSize: fontSize.bodyLg,
-    marginRight: spacing.xs,
-    fontWeight: fontWeight.semibold,
-  },
-  input: {
-    flex: 1,
-    paddingVertical: spacing.lg,
-    color: colors.textPrimary,
-    fontSize: 16,
-  },
-  eyeButton: { padding: spacing.sm },
-  flag: { fontSize: fontSize.h3, marginRight: spacing.md },
-  pickerLabel: {
-    flex: 1,
-    color: colors.textPrimary,
-    fontSize: fontSize.bodyLg,
-    paddingVertical: spacing.lg,
-  },
-  chevron: { marginLeft: 'auto' },
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: 'rgba(192, 57, 43, 0.08)',
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  errorText: {
-    color: colors.error,
     fontSize: fontSize.caption,
-    flex: 1,
+    fontWeight: fontWeight.semibold,
+    marginBottom: spacing.sm,
+    marginLeft: spacing.xs,
   },
-  submit: {
-    backgroundColor: colors.accent,
-    borderRadius: radius.lg,
-    paddingVertical: spacing.lg,
+  langField: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: spacing.sm,
+    backgroundColor: colors.inputBackground,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.xl,
+    minHeight: 52,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    marginBottom: spacing.xl,
   },
-  submitPressed: { opacity: 0.85 },
-  submitDisabled: { opacity: 0.6 },
-  submitText: {
-    color: colors.textInverse,
+  flag: { fontSize: fontSize.h3, marginRight: spacing.md },
+  langText: {
+    flex: 1,
+    color: colors.textPrimary,
     fontSize: fontSize.bodyLg,
-    fontWeight: fontWeight.semibold,
   },
-  linkWrap: { alignItems: 'center', marginTop: spacing.xl },
-  link: {
-    color: colors.textSecondary,
-    fontSize: fontSize.body,
-  },
-  linkBold: {
-    color: colors.accent,
-    fontWeight: fontWeight.semibold,
-  },
-  // Modal styles
   modalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -400,31 +327,30 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     maxHeight: '70%',
   },
-  modalHeader: {
-    paddingVertical: spacing.md,
-    alignItems: 'center',
+  modalGrab: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    marginBottom: spacing.md,
   },
   modalTitle: {
     color: colors.textPrimary,
     fontSize: fontSize.title,
     fontWeight: fontWeight.semibold,
+    marginBottom: spacing.md,
+    textAlign: 'center',
   },
   optionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.lg,
     paddingHorizontal: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
-  },
-  optionRowActive: {
-    backgroundColor: colors.badgeBackground,
     borderRadius: radius.md,
   },
-  optionFlag: {
-    fontSize: fontSize.h3,
-    marginRight: spacing.lg,
-  },
+  optionActive: { backgroundColor: colors.badgeBackground },
+  optionFlag: { fontSize: fontSize.h3, marginRight: spacing.lg },
   optionLabel: {
     flex: 1,
     color: colors.textPrimary,

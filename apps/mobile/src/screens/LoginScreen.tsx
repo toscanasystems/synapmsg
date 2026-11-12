@@ -1,40 +1,28 @@
 /**
- * LoginScreen — email + password form.
- *
- * Layout:
- *   • Synapmsg wordmark (mint green, bold)
- *   • Email field (with mail icon)
- *   • Password field (with lock icon + show/hide toggle)
- *   • "Login" button (full width, mint green)
- *   • "Don't have an account? Sign up" link → Register
- *
- * Loading state: spinner inside button + disabled fields.
- * Error display: red text banner above the button.
+ * Login — pantalla de entrada (UI limpia, español).
  */
 
-import React, { useState, useCallback } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  Pressable,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Alert,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Text, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Feather } from '@expo/vector-icons';
-import colors from '../theme/colors';
-import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
 import { useAuthStore } from '../store/auth';
+import { mapAuthError } from '../api/authErrors';
+import { AuthField, AuthPasswordToggle } from '../components/auth/AuthField';
+import {
+  AuthScreen,
+  AuthPrimaryButton,
+  AuthLinkRow,
+} from '../components/auth/AuthScreen';
+import colors from '../theme/colors';
+import { fontSize, spacing } from '../theme/spacing';
 import { RootStackParamList } from '../types';
 
+function envStr(key: string, fallback = ''): string {
+  return String(process.env[key] ?? fallback).replace(/['"]/g, '');
+}
+
 export function LoginScreen(): JSX.Element {
-  const insets = useSafeAreaInsets();
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList, 'Login'>>();
 
@@ -43,205 +31,137 @@ export function LoginScreen(): JSX.Element {
   const storeError = useAuthStore((s) => s.error);
   const clearError = useAuthStore((s) => s.clearError);
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState(() => envStr('EXPO_PUBLIC_AUTO_EMAIL'));
+  const [password, setPassword] = useState(() =>
+    envStr('EXPO_PUBLIC_AUTO_PASSWORD'),
+  );
   const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
   const error = localError ?? storeError;
 
-  const handleSubmit = useCallback(async () => {
+  const clearMessages = useCallback(() => {
     setLocalError(null);
     clearError();
-    if (!email.trim() || !password) {
-      setLocalError('Please enter your email and password.');
+  }, [clearError]);
+
+  // If hydrate auto-login failed, one more silent attempt on mount.
+  useEffect(() => {
+    if (envStr('EXPO_PUBLIC_AUTO_LOGIN') !== '1') return;
+    const e = envStr('EXPO_PUBLIC_AUTO_EMAIL');
+    const p = envStr('EXPO_PUBLIC_AUTO_PASSWORD');
+    if (!e || !p) return;
+    void (async () => {
+      try {
+        await login({ email: e, password: p });
+      } catch {
+        /* show form */
+      }
+    })();
+  }, [login]);
+
+  const handleSubmit = useCallback(async () => {
+    clearMessages();
+
+    if (!email.trim()) {
+      setLocalError('Ingresá tu correo o Private Number.');
       return;
     }
+    if (!password) {
+      setLocalError('Ingresá tu contraseña.');
+      return;
+    }
+
     try {
       await login({ email: email.trim(), password });
-      // App.tsx watches auth.token — navigation is handled there.
-    } catch {
-      // store error already populated
+    } catch (err) {
+      setLocalError(mapAuthError(err));
     }
-  }, [email, password, login, clearError]);
-
-  const goToRegister = () => navigation.replace('Register');
+  }, [email, password, login, clearMessages]);
 
   return (
-    <KeyboardAvoidingView
-      style={styles.flex}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <AuthScreen
+      title="Synap"
+      subtitle="Escribí en tu idioma. Todos entienden."
+      error={error}
+      onDismissError={clearMessages}
+      footer={
+        <AuthLinkRow
+          prompt="¿No tenés cuenta?"
+          action="Crear una"
+          onPress={() => navigation.replace('Register')}
+        />
+      }
     >
-      <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingTop: insets.top + spacing.xxxl, paddingBottom: insets.bottom + spacing.xxxl },
-        ]}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.logoWrap}>
-          <Text style={styles.logo}>Synapmsg</Text>
-          <Text style={styles.tagline}>Speak your language. Everyone listens.</Text>
-        </View>
+      <AuthField
+        label="Correo o Private Number"
+        icon="mail"
+        value={email}
+        onChangeText={(t) => {
+          setEmail(t);
+          clearMessages();
+        }}
+        placeholder="tu@correo.com"
+        keyboardType="email-address"
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="username"
+        textContentType="username"
+        editable={!isLoading}
+        returnKeyType="next"
+        error={Boolean(error && !email.trim())}
+      />
+      <Text style={styles.hint}>
+        También podés entrar con tu Private Number de 10 dígitos.
+      </Text>
 
-        <View style={styles.form}>
-          <View style={styles.field}>
-            <Feather
-              name="mail"
-              size={18}
-              color={colors.textSecondary}
-              style={styles.fieldIcon}
-            />
-            <TextInput
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Email"
-              placeholderTextColor={colors.textSecondary}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="emailAddress"
-              style={styles.input}
-              editable={!isLoading}
-            />
-          </View>
+      <AuthField
+        label="Contraseña"
+        icon="lock"
+        value={password}
+        onChangeText={(t) => {
+          setPassword(t);
+          clearMessages();
+        }}
+        placeholder="Tu contraseña"
+        secureTextEntry={!showPassword}
+        autoCapitalize="none"
+        autoCorrect={false}
+        autoComplete="password"
+        textContentType="password"
+        editable={!isLoading}
+        returnKeyType="go"
+        onSubmitEditing={() => {
+          void handleSubmit();
+        }}
+        error={Boolean(error && !password)}
+        right={
+          <AuthPasswordToggle
+            visible={showPassword}
+            onToggle={() => setShowPassword((v) => !v)}
+          />
+        }
+      />
 
-          <View style={styles.field}>
-            <Feather
-              name="lock"
-              size={18}
-              color={colors.textSecondary}
-              style={styles.fieldIcon}
-            />
-            <TextInput
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Password"
-              placeholderTextColor={colors.textSecondary}
-              secureTextEntry={!showPassword}
-              autoCapitalize="none"
-              autoCorrect={false}
-              textContentType="password"
-              style={styles.input}
-              editable={!isLoading}
-            />
-            <Pressable
-              onPress={() => setShowPassword((v) => !v)}
-              hitSlop={8}
-              style={styles.eyeButton}
-              accessibilityRole="button"
-              accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
-            >
-              <Feather
-                name={showPassword ? 'eye-off' : 'eye'}
-                size={18}
-                color={colors.textSecondary}
-              />
-            </Pressable>
-          </View>
-
-          {error ? (
-            <View style={styles.errorBanner}>
-              <Feather name="alert-circle" size={16} color={colors.error} />
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : null}
-
-          <Pressable
-            style={({ pressed }) => [styles.submit, pressed && styles.submitPressed, isLoading && styles.submitDisabled]}
-            onPress={handleSubmit}
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <Text style={styles.submitText}>Signing in…</Text>
-            ) : (
-              <Text style={styles.submitText}>Login</Text>
-            )}
-          </Pressable>
-
-          <Pressable onPress={goToRegister} hitSlop={8} style={styles.linkWrap}>
-            <Text style={styles.link}>
-              Don't have an account?{' '}
-              <Text style={styles.linkBold}>Sign up</Text>
-            </Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+      <AuthPrimaryButton
+        label="Entrar"
+        loadingLabel="Entrando…"
+        loading={isLoading}
+        onPress={() => {
+          void handleSubmit();
+        }}
+      />
+    </AuthScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.background },
-  scroll: { flexGrow: 1, paddingHorizontal: spacing.xxl },
-  logoWrap: { alignItems: 'center', marginBottom: spacing.xxxl },
-  logo: {
-    color: colors.accent,
-    fontSize: fontSize.hero,
-    fontWeight: fontWeight.bold,
-    letterSpacing: -1,
-  },
-  tagline: {
-    color: colors.textSecondary,
-    fontSize: fontSize.body,
-    marginTop: spacing.sm,
-  },
-  form: { width: '100%' },
-  field: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    paddingHorizontal: spacing.lg,
-    marginBottom: spacing.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  fieldIcon: { marginRight: spacing.md },
-  input: {
-    flex: 1,
-    paddingVertical: spacing.lg,
-    color: colors.textPrimary,
-    fontSize: 16, // iOS hates <16 in TextInputs (zooms on focus)
-  },
-  eyeButton: { padding: spacing.sm },
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: 'rgba(192, 57, 43, 0.08)',
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  errorText: {
-    color: colors.error,
+  hint: {
+    color: colors.textMuted,
     fontSize: fontSize.caption,
-    flex: 1,
-  },
-  submit: {
-    backgroundColor: colors.accent,
-    borderRadius: radius.lg,
-    paddingVertical: spacing.lg,
-    alignItems: 'center',
-    marginTop: spacing.sm,
-  },
-  submitPressed: { opacity: 0.85 },
-  submitDisabled: { opacity: 0.6 },
-  submitText: {
-    color: colors.textInverse,
-    fontSize: fontSize.bodyLg,
-    fontWeight: fontWeight.semibold,
-  },
-  linkWrap: { alignItems: 'center', marginTop: spacing.xl },
-  link: {
-    color: colors.textSecondary,
-    fontSize: fontSize.body,
-  },
-  linkBold: {
-    color: colors.accent,
-    fontWeight: fontWeight.semibold,
+    marginTop: -spacing.md,
+    marginBottom: spacing.xl,
+    marginLeft: spacing.xs,
   },
 });
 

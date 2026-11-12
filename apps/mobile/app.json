@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Synapmsg",
+    "name": "Synap",
     "slug": "synapmsg",
-    "version": "1.0.0",
+    "version": "1.1.6",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "synapmsg",
@@ -14,30 +14,86 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.synapmsg.app"
+      "bundleIdentifier": "com.synapmsg.app",
+      "buildNumber": "28",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Synap usa la cámara para enviar fotos y videollamadas.",
+        "NSMicrophoneUsageDescription": "Synap usa el micrófono para notas de voz, llamadas y subtítulos.",
+        "NSPhotoLibraryUsageDescription": "Synap accede a tu galería para enviar fotos.",
+        "NSFaceIDUsageDescription": "Synap usa Face ID para desbloquear la app.",
+        "UIBackgroundModes": ["audio", "voip", "remote-notification"]
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.synapmsg.app"
+      "package": "com.synapmsg.app",
+      "versionCode": 63,
+      "permissions": [
+        "READ_CONTACTS",
+        "CAMERA",
+        "RECORD_AUDIO",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "READ_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "POST_NOTIFICATIONS"
+      ]
     },
     "web": {
-      "bundler": "metro",
-      "output": "static",
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-router"
-    ],
     "experiments": {
       "tsconfigPaths": true
     },
     "extra": {
       "eas": {
-        "projectId": "synapmsg"
+        "projectId": "96cfdc6d-cbd8-46d4-b7ea-3d1c3c568495"
       }
-    }
+    },
+    "owner": "toscana26",
+    "plugins": [
+      "expo-font",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Synap usa tu agenda para encontrar amigos en la app e invitar al resto."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Synap accede a tu galería para enviar fotos.",
+          "cameraPermission": "Synap usa la cámara para enviar fotos en el chat."
+        }
+      ],
+      "expo-document-picker",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
+            "buildToolsVersion": "34.0.0",
+            "ndkVersion": "26.1.10909125",
+            "abiFilters": [
+              "arm64-v8a"
+            ]
+          },
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ],
+      "expo-secure-store",
+      "expo-local-authentication"
+    ]
   }
 }
+
+
+
+

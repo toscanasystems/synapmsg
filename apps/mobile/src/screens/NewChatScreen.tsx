@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NewChatScreen — search for a user and start a 1-on-1 chat.
  *
  * Header: back arrow + "New Chat"
@@ -20,6 +20,7 @@ import {
   Pressable,
   ActivityIndicator,
   ListRenderItem,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -35,6 +36,9 @@ import chatsApi from '../api/chats';
 
 const DEBOUNCE_MS = 300;
 
+/** Known demo accounts for beta testing (search by username). */
+const DEMO_QUERIES = ['demo_en', 'demo_es', 'jm'] as const;
+
 export function NewChatScreen(): JSX.Element {
   const insets = useSafeAreaInsets();
   const navigation =
@@ -44,10 +48,28 @@ export function NewChatScreen(): JSX.Element {
 
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<User[]>([]);
+  const [suggestions, setSuggestions] = useState<User[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [isStarting, setIsStarting] = useState<string | null>(null); // userId being started
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const loadSuggestions = useCallback(async () => {
+    try {
+      const batches = await Promise.all(
+        DEMO_QUERIES.map((q) => chatsApi.searchUsers(q).catch(() => [] as User[])),
+      );
+      const byId = new Map<string, User>();
+      batches.flat().forEach((u) => byId.set(u.id, u));
+      setSuggestions(Array.from(byId.values()));
+    } catch {
+      setSuggestions([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSuggestions();
+  }, [loadSuggestions]);
 
   const runSearch = useCallback(async (q: string) => {
     if (!q.trim()) {
@@ -89,14 +111,19 @@ export function NewChatScreen(): JSX.Element {
           contactName: user.name,
           contactLanguage: user.preferredLanguage,
         });
-      } catch {
-        // startChat sets store error; surface a quick alert.
+      } catch (err) {
+        Alert.alert(
+          'No se pudo crear el chat',
+          err instanceof Error ? err.message : 'Intenta de nuevo.',
+        );
       } finally {
         setIsStarting(null);
       }
     },
     [startChat, navigation],
   );
+
+  const listData = query.trim() ? results : suggestions;
 
   const renderItem: ListRenderItem<User> = useCallback(
     ({ item }) => (
@@ -126,20 +153,20 @@ export function NewChatScreen(): JSX.Element {
 
   const renderEmpty = useCallback(() => {
     if (isSearching) return null;
-    if (!hasSearched || !query.trim()) {
+    if (query.trim() && hasSearched) {
       return (
         <EmptyState
-          icon="search"
-          title="Search for someone"
-          subtitle="Find people by name, username, or email to start a conversation."
+          icon="user-x"
+          title="No encontrado"
+          subtitle={`Nadie con "${query.trim()}". Debe estar registrado en Synap (prueba demo_en).`}
         />
       );
     }
     return (
       <EmptyState
-        icon="user-x"
-        title="No users found"
-        subtitle={`No matches for "${query.trim()}".`}
+        icon="search"
+        title="Agregar chat"
+        subtitle="Buscá por Private Number (10 dígitos), @username o email. El Private Number no es un celular: solo te encuentran si lo compartís."
       />
     );
   }, [isSearching, hasSearched, query]);
@@ -154,7 +181,7 @@ export function NewChatScreen(): JSX.Element {
         >
           <Feather name="arrow-left" size={22} color={colors.textPrimary} />
         </Pressable>
-        <Text style={styles.headerTitle}>New Chat</Text>
+        <Text style={styles.headerTitle}>Nuevo chat</Text>
       </View>
 
       <View style={styles.searchWrap}>
@@ -162,7 +189,7 @@ export function NewChatScreen(): JSX.Element {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Search by name, @username, or email"
+          placeholder="Private Number, @username o email"
           placeholderTextColor={colors.textSecondary}
           autoCapitalize="none"
           autoCorrect={false}
@@ -178,14 +205,18 @@ export function NewChatScreen(): JSX.Element {
         ) : null}
       </View>
 
+      {!query.trim() && suggestions.length > 0 ? (
+        <Text style={styles.sectionLabel}>Sugeridos para probar</Text>
+      ) : null}
+
       <FlatList
-        data={results}
+        data={listData}
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         contentContainerStyle={[
           styles.list,
           { paddingBottom: insets.bottom + spacing.xl },
-          results.length === 0 && styles.emptyList,
+          listData.length === 0 && styles.emptyList,
         ]}
         ListEmptyComponent={renderEmpty}
         keyboardShouldPersistTaps="handled"
@@ -228,6 +259,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   clearBtn: { padding: spacing.xs },
+  sectionLabel: {
+    color: colors.textSecondary,
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.semibold,
+    paddingHorizontal: spacing.xl,
+    marginBottom: spacing.sm,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
   list: { paddingHorizontal: spacing.md },
   emptyList: { flexGrow: 1 },
   row: {

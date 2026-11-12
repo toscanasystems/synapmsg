@@ -1,7 +1,17 @@
 import jwt, { SignOptions, JwtPayload } from 'jsonwebtoken';
 import crypto from 'crypto';
 
-const JWT_SECRET: string = process.env.JWT_SECRET || 'dev-insecure-secret-change-me';
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const rawJwt = (process.env.JWT_SECRET || '').trim();
+if (
+  NODE_ENV === 'production' &&
+  (!rawJwt || rawJwt.length < 32 || rawJwt === 'dev-insecure-secret-change-me')
+) {
+  throw new Error(
+    '[fatal] JWT_SECRET missing/weak in production (min 32 chars, no default)',
+  );
+}
+const JWT_SECRET: string = rawJwt || 'dev-insecure-secret-change-me';
 const JWT_EXPIRES_IN: string = process.env.JWT_EXPIRES_IN || '7d';
 
 export interface AuthTokenPayload extends JwtPayload {
@@ -29,6 +39,26 @@ export function signToken(user: { id: string; email: string; username: string })
   };
 
   return jwt.sign(payload, JWT_SECRET, options);
+}
+
+/** Short-lived ticket after password OK but before FIDO2/recovery. */
+export function signLoginTicket(userId: string): string {
+  return jwt.sign(
+    { sub: userId, purpose: 'login_pending' },
+    JWT_SECRET,
+    { expiresIn: '10m', issuer: 'synapmsg', audience: 'synapmsg-login' },
+  );
+}
+
+export function verifyLoginTicket(ticket: string): { sub: string } {
+  const decoded = jwt.verify(ticket, JWT_SECRET, {
+    issuer: 'synapmsg',
+    audience: 'synapmsg-login',
+  }) as JwtPayload & { purpose?: string };
+  if (decoded.purpose !== 'login_pending' || typeof decoded.sub !== 'string') {
+    throw new Error('Invalid login ticket');
+  }
+  return { sub: decoded.sub };
 }
 
 /**

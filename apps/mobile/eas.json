@@ -1,0 +1,63 @@
+{
+  "cli": {
+    "version": ">= 5.9.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.synapmsg.ai",
+        "EXPO_PUBLIC_WS_URL": "wss://api.synapmsg.ai/ws"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.synapmsg.ai",
+        "EXPO_PUBLIC_WS_URL": "wss://api.synapmsg.ai/ws"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.synapmsg.ai",
+        "EXPO_PUBLIC_WS_URL": "wss://api.synapmsg.ai/ws"
+      }
+    },
+    "ios-testflight": {
+      "distribution": "store",
+      "ios": {
+        "resourceClass": "m-medium"
+      },
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.synapmsg.ai",
+        "EXPO_PUBLIC_WS_URL": "wss://api.synapmsg.ai/ws"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "administrador@toscanasystems.com",
+        "ascAppId": "",
+        "appleTeamId": ""
+      },
+      "android": {
+        "track": "internal"
+      }
+    },
+    "ios-testflight": {
+      "ios": {
+        "appleId": "administrador@toscanasystems.com",
+        "ascAppId": "",
+        "appleTeamId": ""
+      }
+    }
+  }
+}

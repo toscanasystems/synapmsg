@@ -1,0 +1,9 @@
+{
+  "platforms": ["android", "ios"],
+  "android": {
+    "modules": ["expo.modules.synaplibsignal.SynapLibsignalModule"]
+  },
+  "ios": {
+    "modules": ["SynapLibsignalModule"]
+  }
+}

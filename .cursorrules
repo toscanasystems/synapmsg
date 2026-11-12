@@ -1,0 +1,82 @@
+# Synapmsg — Cursor Rules (product + engineering north star)
+
+You are building **Synapmsg** for **Toscana Systems, S.A.**  
+Canonical competitive/security spec: `docs/comparativa-synapmsg-norte.pdf`  
+Product summary: `SYNAPMSG_NORTE.md` · Threat model: `SECURITY.md` · Phase prompts: `.cursor-prompts.md`
+
+## Brand
+- Official teal: `#30B0B0` (accent). Dark surfaces; never invent a purple/indigo “AI default” theme.
+- Mobile palette source of truth: `apps/mobile/src/theme/colors.ts` — import colors; do not hard-code hex in screens.
+- Product name **Synapmsg** is a hero-level brand signal on marketing surfaces.
+
+## Mission
+Messaging with **absolute security** (open, auditable, minimal metadata) **and** native real-time translation (write in your language; recipient reads in theirs). Freemium, no ads in Premium. Target license: **AGPL-3.0**.
+
+## Living codebase (non-negotiable)
+This monorepo is already in production:
+- `apps/api` — Express + Prisma + WS · Railway · Neon · `https://api.synapmsg.ai`
+- `apps/mobile` — Expo 51 / RN 0.74 · APK release pipeline under `C:\build\synapmsg\...`
+- `apps/landing` — Next.js · Cloudflare Pages · `https://synapmsg.ai`
+- `apps/media-worker` — Cloudflare Worker + R2
+
+**Do not** scaffold a greenfield Turbo/pnpm monorepo or delete live apps. Evolve in place. New packages (`packages/crypto`, `packages/shared`, desktop Tauri, etc.) are additive.
+
+## Decision order when choosing work
+1. Absolute-security roadmap (E2E → wipe/duress → PQ → KTL → DMS → enclave → FIDO2)
+2. Translation differentiator (cloud + on-device path)
+3. WhatsApp/Telegram parity (groups, media, calls, read receipts)
+4. Ecosystem (bots, wallet, desktop)
+
+## Absolute security package (must stay coherent)
+| ID | Feature | Notes |
+|---|---|---|
+| SEC-E2E | Signal Protocol (libsignal) default | Hybrid per-chat: Private E2E vs Cloud sync |
+| SEC-WIPE | Remote wipe + duress PIN | Duress shows decoy account; wipe from second device/web |
+| SEC-PQ | Hybrid X3DH + Kyber/ML-KEM | Harvest-now-decrypt-later defense |
+| SEC-KTL | Public Key Transparency Log | Append-only Merkle / CONIKS-style |
+| SEC-DMS | Dead Man's Switch | Inactivity → pre-armed encrypted actions |
+| SEC-ENCLAVE | Secure Enclave / StrongBox | Deny decrypt on root/Frida/jailbreak/emulator; block screenshots |
+| SEC-FIDO2 | Hardware 2FA | YubiKey/SoloKey; SIM-swap resistant |
+| SEC-META | Minimal metadata | Email or phone only; judicial order strictly required |
+
+Never ship “security theater”: no plaintext key material in logs, no server-side message plaintext in E2E mode, no silent key replacement without KTL detectability.
+
+## Translation rules
+- Prefer recipient preferred language; show badge + tap-for-original.
+- Cloud path (DeepL) must respect freemium usage limits already in `apps/api/src/billing`.
+- On-device path must not upload ciphertext plaintext of E2E chats to translation cloud — if E2E+on-device, decrypt only on device.
+- Do not claim 100+ languages until engines actually cover them; keep LatAm minority languages as explicit stretch goals.
+
+## Engineering conventions
+- TypeScript strict; match existing file style; minimal diffs; no drive-by refactors.
+- API: Express routers under `apps/api/src/**`; Prisma schema is source of DB truth; `prisma db push` / migrate only with intent.
+- Mobile: Zustand stores, existing API clients; Modal→Alert race: close Modal then `setTimeout(~320ms)` before Alert/native pickers.
+- Secrets: never commit `.env`; use `.env.example` templates.
+- Commits/PRs only when the user asks.
+- Tests: prefer high-value unit/integration for crypto and auth; don’t invent huge harnesses without ask.
+
+## UX / product constraints
+- WhatsApp-familiar patterns for chat list/header/menus where we already mirrored them.
+- “Vaciar chat” = clear-for-me (`clearedAt` on participant), not delete-for-everyone.
+- Freemium gates live in billing/usage — don’t hardcode random limits in UI only.
+
+## Phases (use `.cursor-prompts.md`)
+- **0** Foundation / CI / docs / teal consistency  
+- **1** E2E messaging (libsignal + local encrypted store)  
+- **2.1–2.6** Absolute security features above  
+- **3** Translation depth (on-device + glossary)  
+- **4** AI UX (smart folders, compose assist)  
+- **5** Ecosystem (bots, wallet, desktop)  
+- **6** Launch (AGPL, bounty, hardening)
+
+When the user says “continúa” / “siguiente fase”, open `.cursor-prompts.md` for that phase and execute against the **existing** tree.
+
+## Forbidden
+- Recreating the repo with `create-turbo` as a replacement for live apps
+- Weakening E2E to “make translation easier” without an explicit hybrid-mode UX
+- Storing message plaintext server-side for chats marked Private E2E
+- Purple-on-white generic AI landing redesigns
+- Inventing Stripe/DNS/keys the team does not have — document blockers instead
+
+## Done means
+Working code in this monorepo, deployed when the phase needs it (API Railway / APK install), and docs (`SYNAPMSG_NORTE.md`, `SECURITY.md`) kept truthful about status vs aspiration.

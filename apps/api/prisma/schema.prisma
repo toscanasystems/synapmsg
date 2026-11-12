@@ -19,19 +19,147 @@ model User {
   username             String              @unique
   name                 String
   passwordHash         String
+  /// Zangi-style 10-digit Private Number (not a real SIM). Digits only.
+  privateNumber        String?             @unique
   preferredLanguage    String              @default("es")
   // "cloud" | "on-device" — validated at the API layer.
   // (Prisma enums disallow hyphens, so we store as String.)
   preferredTranslateMode String            @default("cloud")
+  // "free" | "premium"
+  plan                 String              @default("free")
+  planExpiresAt        DateTime?
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  pushToken            String?
+  lastSeenAt           DateTime?
+  mediaBytesUsed       BigInt              @default(0)
+  translationsToday    Int                 @default(0)
+  translationsDayKey   String              @default("")
+  lastActiveAt         DateTime?
+  fido2Enforced        Boolean             @default(false)
+  recoveryCodesHash    String?             // JSON array of argon2 hashes
+  decoyUserId          String?             @db.Uuid
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
-  chatParticipants ChatParticipant[]
-  messages         Message[]
+  chatParticipants   ChatParticipant[]
+  messages           Message[]
+  reactions          MessageReaction[]
+  scheduledMessages  ScheduledMessage[]
+  glossaryEntries    GlossaryEntry[]
+  devices            DeviceIdentity[]
+  ownedBots          Bot[]               @relation("BotOwner")
+  botIdentity        Bot?                @relation("BotIdentity")
 
   @@index([email])
   @@index([username])
+  @@index([privateNumber])
+  @@index([lastActiveAt])
   @@map("users")
+}
+
+// ───────────────────────────────────────────────────────────
+// Bot API (Fase 5) — Telegram-inspired
+// ───────────────────────────────────────────────────────────
+model Bot {
+  id          String   @id @default(uuid()) @db.Uuid
+  ownerId     String   @db.Uuid
+  /// User row that sends as this bot (synthetic account).
+  botUserId   String   @unique @db.Uuid
+  token       String   @unique
+  username    String   @unique
+  name        String
+  webhookUrl  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  owner   User         @relation("BotOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  botUser User         @relation("BotIdentity", fields: [botUserId], references: [id], onDelete: Cascade)
+  updates BotUpdate[]
+
+  @@index([ownerId])
+  @@index([token])
+  @@map("bots")
+}
+
+model BotUpdate {
+  id          String   @id @default(uuid()) @db.Uuid
+  botId       String   @db.Uuid
+  /// Monotonic per-bot update id for getUpdates offset.
+  updateId    Int
+  payloadJson String
+  createdAt   DateTime @default(now())
+
+  bot Bot @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  @@unique([botId, updateId])
+  @@index([botId, updateId])
+  @@map("bot_updates")
+}
+
+// Public key material for future Signal/libsignal sessions.
+// Private keys NEVER leave the device (client SecureStore).
+model DeviceIdentity {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @db.Uuid
+  deviceId        String
+  identityKeyPub  String
+  signedPreKeyPub String
+  signedPreKeyId  Int      @default(1)
+  preKeysJson     String   @default("[]") // JSON array of { keyId, publicKey }
+  registrationId  Int
+  // ML-KEM768 public key (base64) for hybrid PQ handshake
+  pqKemPub        String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([userId])
+  @@map("device_identities")
+}
+
+model KeyTransparencyEntry {
+  id             String   @id @default(uuid()) @db.Uuid
+  seq            Int      @unique
+  userId         String   @db.Uuid
+  identityKeyPub String
+  hash           String
+  prevHash       String
+  createdAt      DateTime @default(now())
+
+  @@index([userId])
+  @@map("key_transparency_log")
+}
+
+model WebAuthnCredential {
+  id           String   @id @default(uuid()) @db.Uuid
+  userId       String   @db.Uuid
+  credentialId String   @unique
+  publicKey    String
+  counter      Int      @default(0)
+  transports   String   @default("[]")
+  label        String   @default("Passkey")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+  @@map("webauthn_credentials")
+}
+
+model GlossaryEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  source    String
+  target    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, source])
+  @@index([userId])
+  @@map("glossary_entries")
 }
 
 // ───────────────────────────────────────────────────────────
@@ -40,11 +168,20 @@ model User {
 model Chat {
   id        String   @id @default(uuid()) @db.Uuid
   type      ChatType @default(single)
+  name      String?
+  // "cloud" | "e2e" — default E2E (absolute security); cloud = sync+MT
+  encryptionMode String @default("e2e")
+  /// Autodestrucción bilateral: 0 | 1 | 6 | 12 | 24 (horas)
+  disappearHours Int @default(0)
+  disappearText  Boolean @default(true)
+  disappearImage Boolean @default(true)
+  disappearAudio Boolean @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  participants ChatParticipant[]
-  messages     Message[]
+  participants      ChatParticipant[]
+  messages          Message[]
+  scheduledMessages ScheduledMessage[]
 
   @@index([updatedAt])
   @@map("chats")
@@ -59,11 +196,14 @@ enum ChatType {
 // ChatParticipant - join table between Chat and User
 // ───────────────────────────────────────────────────────────
 model ChatParticipant {
-  id       String           @id @default(uuid()) @db.Uuid
-  chatId   String           @db.Uuid
-  userId   String           @db.Uuid
-  role     ParticipantRole  @default(member)
-  joinedAt DateTime         @default(now())
+  id         String           @id @default(uuid()) @db.Uuid
+  chatId     String           @db.Uuid
+  userId     String           @db.Uuid
+  role       ParticipantRole  @default(member)
+  joinedAt   DateTime         @default(now())
+  lastReadAt DateTime?
+  // "Vaciar chat" for this user only — hide messages at/before this timestamp
+  clearedAt  DateTime?
 
   chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -91,13 +231,66 @@ model Message {
   translatedText     String?
   translatedLanguage String?
   isTranslated       Boolean  @default(false)
+  mediaUrl           String?
+  mediaType          String?  // "image" | "file" | "audio" | null
+  // Scaffold for E2E payloads (null while encryptionMode=cloud)
+  ciphertext         String?
+  ciphertextType     Int?
+  isE2e              Boolean  @default(false)
+  replyToId          String?  @db.Uuid
+  editedAt           DateTime?
+  deletedAt          DateTime?
+  /// Autodestrucción bilateral (ambos dispositivos).
+  expiresAt          DateTime?
+  /// Foto/audio de una sola vista/escucha.
+  viewOnce           Boolean  @default(false)
+  viewOnceOpenedAt   DateTime?
   createdAt          DateTime @default(now())
 
-  chat   Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
-  sender User @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  chat      Chat              @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender    User              @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo   Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   Message[]         @relation("MessageReplies")
+  reactions MessageReaction[]
 
   @@index([chatId, createdAt])
   @@index([senderId])
   @@index([chatId])
+  @@index([replyToId])
+  @@index([expiresAt])
   @@map("messages")
+}
+
+model MessageReaction {
+  id        String   @id @default(uuid()) @db.Uuid
+  messageId String   @db.Uuid
+  userId    String   @db.Uuid
+  emoji     String
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([messageId])
+  @@map("message_reactions")
+}
+
+model ScheduledMessage {
+  id        String   @id @default(uuid()) @db.Uuid
+  chatId    String   @db.Uuid
+  senderId  String   @db.Uuid
+  text      String
+  mediaUrl  String?
+  mediaType String?
+  sendAt    DateTime
+  createdAt DateTime @default(now())
+
+  chat   Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender User @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([sendAt])
+  @@index([chatId])
+  @@index([senderId])
+  @@map("scheduled_messages")
 }

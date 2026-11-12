@@ -27,6 +27,7 @@ export class WebSocketManager {
   private state: WsConnectionState = 'disconnected';
   private reconnectAttempt = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
   private manuallyClosed = false;
 
   private messageListeners = new Set<MessageListener>();
@@ -82,14 +83,38 @@ export class WebSocketManager {
   // Connection lifecycle
   // ───────────────────────────────────────────────────────
   connect(token: string): void {
-    if (this.token === token && this.socket) return;
-    // Switching tokens: tear down any existing socket first.
+    // Reuse only if same token AND already connected.
+    if (
+      this.token === token &&
+      this.socket &&
+      this.state === 'connected'
+    ) {
+      return;
+    }
+    // Switching tokens / half-open socket: tear down first.
     if (this.socket) {
       this.teardownSocket(false);
     }
     this.token = token;
     this.manuallyClosed = false;
     this.openSocket();
+  }
+
+  /** Wait until WS is connected (reconnect if needed). */
+  async ensureConnected(
+    token?: string | null,
+    timeoutMs = 6000,
+  ): Promise<boolean> {
+    const t = token ?? this.token;
+    if (!t) return false;
+    if (this.state === 'connected' && this.socket) return true;
+    this.reconnect(t);
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      if (this.state === 'connected' && this.socket) return true;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+    return this.state === 'connected' && Boolean(this.socket);
   }
 
   private openSocket(): void {
@@ -111,6 +136,7 @@ export class WebSocketManager {
     socket.onopen = () => {
       this.reconnectAttempt = 0;
       this.setState('connected');
+      this.startPing();
     };
 
     socket.onmessage = (event: WebSocketMessageEvent) => {
@@ -118,6 +144,7 @@ export class WebSocketManager {
     };
 
     socket.onclose = () => {
+      this.stopPing();
       this.socket = null;
       this.setState('disconnected');
       if (!this.manuallyClosed) {
@@ -165,7 +192,23 @@ export class WebSocketManager {
     }, delay);
   }
 
+  private startPing(): void {
+    this.stopPing();
+    // Keep NAT / proxies from dropping idle sockets (calls need live WS).
+    this.pingTimer = setInterval(() => {
+      this.send('ping');
+    }, 20_000);
+  }
+
+  private stopPing(): void {
+    if (this.pingTimer) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
+  }
+
   private teardownSocket(suppressReconnect: boolean): void {
+    this.stopPing();
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -194,6 +237,17 @@ export class WebSocketManager {
     this.teardownSocket(true);
     this.token = null;
     this.reconnectAttempt = 0;
+  }
+
+  /** Force re-open (e.g. after switching direct ↔ tunnel base URL). */
+  reconnect(token?: string): void {
+    const next = token ?? this.token;
+    if (!next) return;
+    this.teardownSocket(false);
+    this.manuallyClosed = false;
+    this.token = next;
+    this.reconnectAttempt = 0;
+    this.openSocket();
   }
 
   // ───────────────────────────────────────────────────────

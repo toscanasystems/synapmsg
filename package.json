@@ -11,11 +11,16 @@
     "dev:api": "cd apps/api && npm run dev",
     "dev:landing": "cd apps/landing && npm run dev",
     "dev:mobile": "cd apps/mobile && npx expo start",
+    "build": "npm run prisma:generate --workspace=synapmsg-api && npm run build --workspace=synapmsg-api",
+    "start": "npm run prisma:push --workspace=synapmsg-api && npm run start --workspace=synapmsg-api",
     "build:api": "cd apps/api && npm run build",
     "build:landing": "cd apps/landing && npm run build",
     "db:push": "cd apps/api && npx prisma db push",
     "db:migrate": "cd apps/api && npx prisma migrate dev",
-    "db:studio": "cd apps/api && npx prisma studio"
+    "db:studio": "cd apps/api && npx prisma studio",
+    "typecheck:api": "cd apps/api && npx tsc --noEmit",
+    "ci": "npm run typecheck:api",
+    "postinstall": "npm run prisma:generate --workspace=synapmsg-api"
   },
   "engines": {
     "node": ">=20.0.0"

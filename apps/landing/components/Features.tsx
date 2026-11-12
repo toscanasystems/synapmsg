@@ -1,85 +1,82 @@
-const FEATURES = [
+﻿const FEATURES = [
   {
-    icon: "🌐",
-    title: "Traducción nativa integrada",
+    icon: "🛡️",
+    title: "Seguridad absoluta",
     description:
-      "Escribe en español, tu contacto recibe en inglés, chino, portugués o cualquiera de los 100+ idiomas soportados. Sin copiar y pegar a Google Translate.",
-    highlight: "Diferenciador clave",
+      "E2E por defecto, wipe remoto firmado, PIN de coacción con cuenta señuelo, KTL, Dead Man's Switch, FLAG_SECURE y FIDO2. Lo que WhatsApp y Telegram no empaquetan juntos.",
+    highlight: "Paquete ★",
   },
   {
-    icon: "🔒",
-    title: "Cifrado extremo a extremo",
+    icon: "🔐",
+    title: "Post-cuántica híbrida",
     description:
-      "Signal Protocol por defecto en todos los chats. Ni nosotros podemos leer tus mensajes. Tu privacidad no es negociable.",
+      "Handshake X3DH + Double Ratchet + ML-KEM768. Defensa real contra harvest-now-decrypt-later, no theater.",
+    highlight: "ML-KEM",
   },
   {
-    icon: "☁️",
-    title: "Sincronización en la nube",
+    icon: "📵",
+    title: "Private Number · sin SIM",
     description:
-      "Tus chats disponibles en todos tus dispositivos. Modo híbrido: elige entre E2E puro o nube sincronizada por cada conversación.",
+      "Al crear la cuenta te damos un Private Number único (XX-XXXX-XXXX). No es un celular: solo te encuentran si lo compartís.",
+    highlight: "Sin SIM",
   },
   {
-    icon: "⚡",
-    title: "Tiempo real",
+    icon: "🧨",
+    title: "Wipe remoto + coacción",
     description:
-      "Mensajes instantáneos vía WebSocket. Sin latencia perceptible. La traducción ocurre en milisegundos antes de enviar.",
+      "Vacía el dispositivo a distancia. El PIN de coacción abre un señuelo — no tu vault real.",
   },
   {
-    icon: "🤖",
-    title: "Modo privacidad on-device",
+    icon: "⚖️",
+    title: "Híbrido por chat",
     description:
-      "La traducción puede ocurrir localmente en tu dispositivo con Whisper.cpp. Ningún mensaje sale de tu teléfono. Ideal para conversaciones sensibles.",
+      "Privado E2E o nube sincronizada — lo elegís por conversación. Servidor sin plaintext cuando el chat es E2E.",
   },
   {
-    icon: "🚫",
-    title: "Sin anuncios, sin tracking",
+    icon: "📜",
+    title: "AGPL · auditable",
     description:
-      "Tu información no se vende. Modelo freemium transparente: gratis con límites razonables, Premium sin anuncios ni límites.",
+      "Código abierto y bug bounty. Seguridad verificable, no marketing opaco.",
   },
 ];
 
 export function Features() {
   return (
-    <section className="bg-primary-soft py-24">
+    <section id="features" className="bg-primary py-24">
       <div className="mx-auto max-w-6xl px-6">
-        {/* Section header */}
         <div className="mx-auto max-w-3xl text-center mb-16">
-          <span className="inline-block rounded-full bg-accent-light px-4 py-1.5 text-sm font-medium text-accent mb-4">
-            Características
+          <span className="inline-block rounded-full bg-accent/20 px-4 py-1.5 text-sm font-medium text-accent-light mb-4">
+            Lo mejor de Synap
           </span>
-          <h2 className="font-serif text-4xl md:text-5xl font-bold text-primary mb-4">
-            Lo mejor de cada app, sin lo peor de ninguna
+          <h2 className="font-serif text-4xl md:text-5xl font-bold text-white mb-4">
+            Seguridad absoluta. Sin teatro.
           </h2>
-          <p className="text-lg text-text-secondary leading-relaxed">
-            Combinamos la privacidad de WhatsApp, la flexibilidad de Telegram, la potencia de WeChat —
-            y añadimos traducción nativa que ninguna tiene.
+          <p className="text-lg text-gray-300 leading-relaxed">
+            Paquete de seguridad absoluta para el mundo entero — E2E, wipe,
+            coacción, post-cuántica y Private Number sin SIM.
           </p>
         </div>
 
-        {/* Features grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {FEATURES.map((feature, index) => (
+          {FEATURES.map((feature) => (
             <div
-              key={index}
-              className="group relative rounded-2xl bg-white p-8 shadow-sm border border-gray-100 hover:shadow-lg hover:border-accent/30 transition-all duration-300"
+              key={feature.title}
+              className="group relative rounded-2xl bg-surface p-8 border border-white/10 hover:border-accent/40 hover:shadow-[0_0_30px_rgba(48,176,176,0.15)] transition-all duration-300"
             >
-              {/* Icon */}
-              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-xl bg-accent-light text-3xl group-hover:scale-110 transition-transform duration-300">
+              <div className="mb-5 flex h-14 w-14 items-center justify-center rounded-xl bg-accent/15 text-3xl group-hover:scale-110 transition-transform duration-300">
                 {feature.icon}
               </div>
 
-              {/* Title */}
-              <h3 className="text-xl font-bold text-primary mb-3 flex items-center gap-2">
+              <h3 className="text-xl font-bold text-white mb-3 flex flex-wrap items-center gap-2">
                 {feature.title}
-                {feature.highlight && (
-                  <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-white">
+                {feature.highlight ? (
+                  <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-black">
                     {feature.highlight}
                   </span>
-                )}
+                ) : null}
               </h3>
 
-              {/* Description */}
-              <p className="text-text-secondary leading-relaxed">
+              <p className="text-gray-300 leading-relaxed">
                 {feature.description}
               </p>
             </div>

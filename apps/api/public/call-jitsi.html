@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Synap Call · Jitsi media</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: #0B141A; color: #fff; font-family: system-ui, sans-serif; overflow: hidden; }
+    #wrap { position: relative; width: 100%; height: 100%; }
+    #jitsi { width: 100%; height: 100%; }
+    #banner {
+      position: absolute; left: 12px; right: 12px; top: 12px; z-index: 5;
+      background: rgba(11,20,26,0.82); border: 1px solid rgba(48,176,176,0.35);
+      border-radius: 12px; padding: 10px 12px; pointer-events: none;
+    }
+    #banner .brand { color: #30B0B0; font-weight: 700; font-size: 13px; }
+    #status { margin-top: 4px; font-size: 13px; color: #cfd8dc; white-space: pre-line; }
+    #fallback {
+      display: none; position: absolute; inset: 0; z-index: 6;
+      align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+      background: #0B141A; padding: 24px; text-align: center;
+    }
+    #fallback.show { display: flex; }
+    #fallback a, #fallback button {
+      background: #30B0B0; color: #000; border: none; border-radius: 10px;
+      padding: 12px 16px; font-weight: 700; text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div id="banner">
+      <div class="brand">Synap · llamada</div>
+      <div id="status">Conectando…</div>
+    </div>
+    <div id="jitsi"></div>
+    <div id="fallback">
+      <div>No se pudo cargar Jitsi en este WebView.</div>
+      <button id="tryWebRtc" type="button">Usar WebRTC P2P</button>
+    </div>
+  </div>
+  <script>
+(function () {
+  const params = new URLSearchParams(location.search);
+  const chatId = params.get('chatId') || '';
+  const video = params.get('video') !== '0';
+  const displayName = params.get('name') || 'Synap';
+  const domainParam = params.get('jitsi') || 'meet.jit.si';
+  const apiBase = params.get('api') || (location.protocol + '//' + location.host);
+
+  const statusEl = document.getElementById('status');
+  function setStatus(t) { statusEl.textContent = t; }
+  function postNative(obj) {
+    try {
+      if (window.ReactNativeWebView) {
+        window.ReactNativeWebView.postMessage(JSON.stringify(obj));
+      }
+    } catch (_) {}
+  }
+
+  /** Prefer opaque server-minted room (callRoom). Never derive from chatId alone. */
+  const roomParam = (params.get('room') || '').trim();
+  if (!roomParam || roomParam.length < 12) {
+    setStatus('Falta sala opaca (callRoom). Colgá y volvé a llamar.');
+    postNative({ type: 'error', message: 'callRoom requerido' });
+    document.getElementById('fallback').classList.add('show');
+    return;
+  }
+  const roomName = roomParam.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+  const domain = domainParam.replace(/^https?:\/\//, '');
+
+  function goWebRtc() {
+    const q = new URLSearchParams(location.search);
+    q.set('engine', 'webrtc');
+    location.replace(apiBase.replace(/\/$/, '') + '/call?' + q.toString());
+  }
+  document.getElementById('tryWebRtc').onclick = goWebRtc;
+
+  function bootJitsi() {
+    if (!window.JitsiMeetExternalAPI) {
+      document.getElementById('fallback').classList.add('show');
+      setStatus('Jitsi no disponible');
+      postNative({ type: 'error', message: 'Jitsi External API no cargó' });
+      return;
+    }
+    setStatus('Conectando audio…');
+    // meet.jit.si often shows “waiting for moderator / conference” for
+    // anonymous iframe rooms. For Synap 1:1 we auto-fallback to WebRTC P2P.
+    let joined = false;
+    const fallbackTimer = setTimeout(function () {
+      if (joined) return;
+      setStatus('Sala pública Jitsi bloqueada · pasando a WebRTC…');
+      postNative({ type: 'error', message: 'Jitsi lobby → WebRTC' });
+      goWebRtc();
+    }, 8000);
+
+    const api = new JitsiMeetExternalAPI(domain, {
+      roomName,
+      parentNode: document.getElementById('jitsi'),
+      width: '100%',
+      height: '100%',
+      userInfo: { displayName },
+      configOverwrite: {
+        prejoinPageEnabled: false,
+        prejoinConfig: { enabled: false },
+        startWithAudioMuted: false,
+        startWithVideoMuted: !video,
+        disableDeepLinking: true,
+        enableWelcomePage: false,
+        enableClosePage: false,
+        disableInviteFunctions: true,
+        requireDisplayName: false,
+        enableLobby: false,
+        hideConferenceSubject: true,
+        subject: 'Synap',
+        disableModeratorIndicator: true,
+        notifications: [],
+        disabledNotifications: [
+          'notify.moderator',
+          'notify.disconnected',
+          'dialog.grantModeratorTitle',
+        ],
+        p2p: { enabled: true },
+        toolbarButtons: video
+          ? ['microphone', 'camera', 'toggle-camera', 'hangup']
+          : ['microphone', 'hangup'],
+      },
+      interfaceConfigOverwrite: {
+        SHOW_JITSI_WATERMARK: false,
+        SHOW_WATERMARK_FOR_GUESTS: false,
+        DEFAULT_BACKGROUND: '#0B141A',
+        DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
+        TOOLBAR_ALWAYS_VISIBLE: true,
+        DISABLE_FOCUS_INDICATOR: true,
+        DISABLE_DOMINANT_SPEAKER_INDICATOR: true,
+        MOBILE_APP_PROMO: false,
+      },
+    });
+
+    api.addListener('videoConferenceJoined', function () {
+      joined = true;
+      clearTimeout(fallbackTimer);
+      setStatus('Conectado');
+      postNative({ type: 'connected', engine: 'jitsi' });
+      if (!video) {
+        try { api.executeCommand('toggleVideo'); } catch (_) {}
+      }
+    });
+    api.addListener('videoConferenceLeft', function () {
+      clearTimeout(fallbackTimer);
+      postNative({ type: 'hangup', engine: 'jitsi' });
+    });
+    api.addListener('readyToClose', function () {
+      clearTimeout(fallbackTimer);
+      postNative({ type: 'hangup', engine: 'jitsi' });
+    });
+    api.addListener('participantJoined', function () {
+      setStatus('El otro está en la llamada');
+      postNative({ type: 'media-ok', engine: 'jitsi' });
+    });
+    api.addListener('errorOccurred', function (e) {
+      var msg = (e && (e.message || e.error)) ? String(e.message || e.error) : 'error media';
+      if (/microphone|audio|permission|NotAllowed|NotFound/i.test(msg)) {
+        setStatus('Sin micrófono en el WebView. Revisá permisos de Synap.');
+        postNative({ type: 'error', message: 'Micrófono bloqueado en WebView' });
+      }
+    });
+  }
+
+  const s = document.createElement('script');
+  s.src = 'https://' + domain + '/external_api.js';
+  s.async = true;
+  s.onload = bootJitsi;
+  s.onerror = function () {
+    document.getElementById('fallback').classList.add('show');
+    setStatus('Error cargando Jitsi');
+    postNative({ type: 'error', message: 'No se pudo cargar Jitsi' });
+  };
+  document.head.appendChild(s);
+})();
+  </script>
+</body>
+</html>

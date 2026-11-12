@@ -6,7 +6,14 @@ import { verifyToken, AuthTokenPayload } from '../lib/jwt';
 import {
   translateForRecipients,
   normalizeLanguageCode,
+  toAppLanguageCode,
 } from '../translation/service';
+import { consumeTranslation, PlanLimitError } from '../billing/usage';
+
+function toAppLang(code: string): string {
+  return toAppLanguageCode(code);
+}
+import { pushToUserTokens } from '../lib/push';
 
 // ───────────────────────────────────────────────────────────
 // Connection registry: userId -> set of open sockets
@@ -39,6 +46,19 @@ function removeConnection(userId: string, socket: WebSocket): void {
 // ───────────────────────────────────────────────────────────
 // Outbound payloads
 // ───────────────────────────────────────────────────────────
+export type ReactionSummary = {
+  emoji: string;
+  count: number;
+  me: boolean;
+  userIds?: string[];
+};
+
+export type ReplyPreview = {
+  id: string;
+  senderName: string;
+  text: string;
+};
+
 export interface WsMessagePayload {
   id: string;
   chatId: string;
@@ -53,6 +73,18 @@ export interface WsMessagePayload {
   translatedText: string;
   translatedLanguage: string | null;
   isTranslated: boolean;
+  mediaUrl?: string | null;
+  mediaType?: string | null;
+  ciphertext?: string | null;
+  ciphertextType?: number | null;
+  isE2e?: boolean;
+  editedAt?: string | null;
+  deletedAt?: string | null;
+  expiresAt?: string | null;
+  viewOnce?: boolean;
+  viewOnceOpenedAt?: string | null;
+  replyTo?: ReplyPreview | null;
+  reactions?: ReactionSummary[];
   createdAt: string;
 }
 
@@ -65,11 +97,64 @@ function safeSend(socket: WebSocket, payload: unknown): void {
   }
 }
 
-export function sendToUser(userId: string, payload: unknown): void {
+export function sendToUser(userId: string, payload: unknown): number {
   const set = connections.get(userId);
-  if (!set) return;
+  if (!set || set.size === 0) return 0;
+  let delivered = 0;
   for (const socket of set) {
-    safeSend(socket, payload);
+    if (socket.readyState === WebSocket.OPEN) {
+      safeSend(socket, payload);
+      delivered += 1;
+    }
+  }
+  return delivered;
+}
+
+export function isUserConnected(userId: string): boolean {
+  const set = connections.get(userId);
+  if (!set) return false;
+  for (const socket of set) {
+    if (socket.readyState === WebSocket.OPEN) return true;
+  }
+  return false;
+}
+
+/** Notify everyone who shares a chat with this user about online/offline. */
+export async function broadcastPresence(
+  userId: string,
+  online: boolean,
+): Promise<void> {
+  const now = new Date();
+  if (!online) {
+    await prisma.user
+      .update({ where: { id: userId }, data: { lastSeenAt: now } })
+      .catch(() => undefined);
+  } else {
+    await prisma.user
+      .update({ where: { id: userId }, data: { lastSeenAt: now } })
+      .catch(() => undefined);
+  }
+  const memberships = await prisma.chatParticipant.findMany({
+    where: { userId },
+    select: { chatId: true },
+  });
+  if (memberships.length === 0) return;
+  const peers = await prisma.chatParticipant.findMany({
+    where: {
+      chatId: { in: memberships.map((m) => m.chatId) },
+      userId: { not: userId },
+    },
+    select: { userId: true },
+  });
+  const unique = new Set(peers.map((p) => p.userId));
+  const payload = {
+    type: 'presence',
+    userId,
+    online,
+    lastSeenAt: now.toISOString(),
+  };
+  for (const peerId of unique) {
+    sendToUser(peerId, payload);
   }
 }
 
@@ -85,22 +170,125 @@ interface DbMessage {
   translatedText: string | null;
   translatedLanguage: string | null;
   isTranslated: boolean;
+  mediaUrl?: string | null;
+  mediaType?: string | null;
+  ciphertext?: string | null;
+  ciphertextType?: number | null;
+  isE2e?: boolean;
+  editedAt?: Date | null;
+  deletedAt?: Date | null;
+  expiresAt?: Date | null;
+  viewOnce?: boolean;
+  viewOnceOpenedAt?: Date | null;
+  replyToId?: string | null;
   createdAt: Date;
 }
 
-export function serializeMessage(msg: DbMessage, sender: { id: string; username: string; name: string }): WsMessagePayload {
+export type ReactionSummaryWire = ReactionSummary & { userIds: string[] };
+
+export function summarizeReactions(
+  rows: Array<{ emoji: string; userId: string }>,
+  meId?: string,
+): ReactionSummaryWire[] {
+  const map = new Map<string, { count: number; me: boolean; userIds: string[] }>();
+  for (const r of rows) {
+    const cur = map.get(r.emoji) ?? { count: 0, me: false, userIds: [] };
+    cur.count += 1;
+    cur.userIds.push(r.userId);
+    if (meId && r.userId === meId) cur.me = true;
+    map.set(r.emoji, cur);
+  }
+  return Array.from(map.entries()).map(([emoji, v]) => ({
+    emoji,
+    count: v.count,
+    me: v.me,
+    userIds: v.userIds,
+  }));
+}
+
+export function serializeMessage(
+  msg: DbMessage,
+  sender: { id: string; username: string; name: string },
+  opts?: {
+    reactions?: ReactionSummary[];
+    replyTo?: ReplyPreview | null;
+    viewerId?: string;
+  },
+): WsMessagePayload {
+  if (msg.deletedAt) {
+    return {
+      id: msg.id,
+      chatId: msg.chatId,
+      senderId: msg.senderId,
+      sender,
+      originalText: 'Mensaje eliminado',
+      originalLanguage: msg.originalLanguage,
+      translatedText: 'Mensaje eliminado',
+      translatedLanguage: null,
+      isTranslated: false,
+      mediaUrl: null,
+      mediaType: null,
+      editedAt: null,
+      deletedAt: msg.deletedAt.toISOString(),
+      expiresAt: msg.expiresAt ? msg.expiresAt.toISOString() : null,
+      viewOnce: Boolean(msg.viewOnce),
+      viewOnceOpenedAt: msg.viewOnceOpenedAt
+        ? msg.viewOnceOpenedAt.toISOString()
+        : null,
+      replyTo: null,
+      reactions: [],
+      createdAt: msg.createdAt.toISOString(),
+    };
+  }
+  const isE2e = Boolean(msg.isE2e);
+  const placeholder = isE2e ? '🔒 Mensaje cifrado' : msg.originalText;
+  const isViewerSender =
+    Boolean(opts?.viewerId) && opts!.viewerId === msg.senderId;
+  // Receptor: sin media hasta abrir. Emisor: puede ver lo que envió.
+  const viewOnceLocked =
+    Boolean(msg.viewOnce) &&
+    !msg.viewOnceOpenedAt &&
+    !msg.deletedAt &&
+    !isViewerSender;
   return {
     id: msg.id,
     chatId: msg.chatId,
     senderId: msg.senderId,
     sender,
-    originalText: msg.originalText,
+    originalText: isE2e ? placeholder : msg.originalText,
     originalLanguage: msg.originalLanguage,
-    translatedText: msg.translatedText ?? msg.originalText,
-    translatedLanguage: msg.translatedLanguage,
-    isTranslated: msg.isTranslated,
+    translatedText: isE2e
+      ? placeholder
+      : (msg.translatedText ?? msg.originalText),
+    translatedLanguage: isE2e ? null : msg.translatedLanguage,
+    isTranslated: isE2e ? false : msg.isTranslated,
+    mediaUrl: viewOnceLocked ? null : msg.mediaUrl ?? null,
+    mediaType: msg.mediaType ?? null,
+    ciphertext: msg.ciphertext ?? null,
+    ciphertextType: msg.ciphertextType ?? null,
+    isE2e,
+    editedAt: msg.editedAt ? msg.editedAt.toISOString() : null,
+    deletedAt: null,
+    expiresAt: msg.expiresAt ? msg.expiresAt.toISOString() : null,
+    viewOnce: Boolean(msg.viewOnce),
+    viewOnceOpenedAt: msg.viewOnceOpenedAt
+      ? msg.viewOnceOpenedAt.toISOString()
+      : null,
+    replyTo: opts?.replyTo ?? null,
+    reactions: opts?.reactions ?? [],
     createdAt: msg.createdAt.toISOString(),
   };
+}
+
+/** Broadcast a payload to every participant of a chat. */
+export async function broadcastToChat(chatId: string, payload: unknown): Promise<void> {
+  const participants = await prisma.chatParticipant.findMany({
+    where: { chatId },
+    select: { userId: true },
+  });
+  for (const p of participants) {
+    sendToUser(p.userId, payload);
+  }
 }
 
 export class HttpError extends Error {
@@ -122,12 +310,46 @@ export class HttpError extends Error {
  *
  * Returns the saved message (with sender info) for HTTP responses.
  */
+function computeExpiresAt(
+  chat: {
+    disappearHours: number;
+    disappearText: boolean;
+    disappearImage: boolean;
+    disappearAudio: boolean;
+  },
+  mediaType?: string | null,
+): Date | null {
+  const hours = chat.disappearHours;
+  if (![1, 6, 12, 24].includes(hours)) return null;
+  const kind =
+    mediaType === 'image'
+      ? 'image'
+      : mediaType === 'audio'
+        ? 'audio'
+        : 'text';
+  if (kind === 'text' && !chat.disappearText) return null;
+  if (kind === 'image' && !chat.disappearImage) return null;
+  if (kind === 'audio' && !chat.disappearAudio) return null;
+  return new Date(Date.now() + hours * 60 * 60 * 1000);
+}
+
 export async function createAndBroadcastMessage(
   chatId: string,
   senderId: string,
-  text: string
+  text: string,
+  media?: {
+    mediaUrl?: string | null;
+    mediaType?: string | null;
+    replyToId?: string | null;
+    ciphertext?: string | null;
+    ciphertextType?: number | null;
+    viewOnce?: boolean;
+  },
 ): Promise<{ message: WsMessagePayload; raw: DbMessage }> {
-  if (typeof text !== 'string' || !text.trim()) {
+  const hasCipher =
+    typeof media?.ciphertext === 'string' && media.ciphertext.trim().length > 0;
+
+  if (!hasCipher && (typeof text !== 'string' || !text.trim())) {
     throw new HttpError(400, 'text is required and must be non-empty');
   }
 
@@ -150,47 +372,182 @@ export async function createAndBroadcastMessage(
   }
 
   const sender = senderParticipant.user;
-  // 2. Detect language — v1 heuristic: sender's preferredLanguage
-  const originalLanguage = normalizeLanguageCode(sender.preferredLanguage);
+  const e2eMode = chat.encryptionMode === 'e2e';
 
-  // 3. Save original message (translation fields null for now)
+  if (e2eMode && !hasCipher) {
+    throw new HttpError(
+      400,
+      'Este chat está en modo E2E: se requiere ciphertext (el servidor no acepta plaintext)',
+    );
+  }
+
+  // Hint only — DeepL auto-detect overrides when possible.
+  const languageHint = normalizeLanguageCode(sender.preferredLanguage);
+
+  let replyPreview: ReplyPreview | null = null;
+  let replyToId: string | null = null;
+  if (media?.replyToId) {
+    const parent = await prisma.message.findFirst({
+      where: { id: media.replyToId, chatId },
+      include: { sender: { select: { name: true } } },
+    });
+    if (parent && !parent.deletedAt) {
+      replyToId = parent.id;
+      replyPreview = {
+        id: parent.id,
+        senderName: parent.sender.name,
+        text: parent.isE2e
+          ? '🔒 Mensaje cifrado'
+          : (parent.originalText || '').slice(0, 140),
+      };
+    }
+  }
+
+  const recipients = chat.participants.filter((p) => p.userId !== senderId);
+
+  const expiresAt = computeExpiresAt(chat, media?.mediaType);
+  const viewOnce = Boolean(media?.viewOnce) &&
+    (media?.mediaType === 'image' || media?.mediaType === 'audio');
+
+  // E2E path: store ciphertext only — never translate / never keep plaintext.
+  if (e2eMode && hasCipher) {
+    const message: DbMessage = await prisma.message.create({
+      data: {
+        chatId,
+        senderId,
+        originalText: '',
+        originalLanguage: toAppLang(languageHint),
+        translatedText: null,
+        translatedLanguage: null,
+        isTranslated: false,
+        mediaUrl: media?.mediaUrl || null,
+        mediaType: media?.mediaType || null,
+        ciphertext: media!.ciphertext!.trim(),
+        ciphertextType:
+          typeof media?.ciphertextType === 'number' ? media.ciphertextType : 1,
+        isE2e: true,
+        replyToId,
+        expiresAt,
+        viewOnce,
+      },
+    });
+
+    await prisma.chat
+      .update({ where: { id: chatId }, data: { updatedAt: new Date() } })
+      .catch(() => undefined);
+
+    const senderInfo = {
+      id: sender.id,
+      username: sender.username,
+      name: sender.name,
+    };
+    let senderWire: WsMessagePayload | null = null;
+    for (const participant of chat.participants) {
+      const wire = serializeMessage(message, senderInfo, {
+        replyTo: replyPreview,
+        viewerId: participant.userId,
+      });
+      if (participant.userId === senderId) senderWire = wire;
+      sendToUser(participant.userId, {
+        type: 'message',
+        chatId,
+        message: wire,
+      });
+    }
+    void pushToUserTokens(
+      recipients.map((r) => (r.user as { pushToken?: string | null }).pushToken),
+      sender.name || sender.username,
+      viewOnce
+        ? media?.mediaType === 'audio'
+          ? '🎵 Audio · una vez'
+          : '📷 Foto · una vez'
+        : '🔒 Mensaje cifrado',
+      { type: 'message', chatId, senderId },
+    ).catch(() => undefined);
+    return {
+      message:
+        senderWire ||
+        serializeMessage(message, senderInfo, {
+          replyTo: replyPreview,
+          viewerId: senderId,
+        }),
+      raw: message,
+    };
+  }
+
+  // Glossary for the sender (protect brand/names during MT).
+  const glossaryRows = await prisma.glossaryEntry.findMany({
+    where: { userId: senderId },
+    select: { source: true, target: true },
+    take: 100,
+  });
+
+  // Skip DeepL for pure media captions that are short placeholders.
+  const skipTranslate =
+    Boolean(media?.mediaUrl) &&
+    /^(📷|📄|🎵|📍|👤|↪)/.test(text.trim());
+
+  // 3. Recipients + translation (auto-detect source language).
+  const recipientLanguages = recipients.map((r) =>
+    normalizeLanguageCode(r.user.preferredLanguage),
+  );
+
+  let translationMap = new Map<string, string>();
+  let detectedSource = languageHint;
+  if (!skipTranslate && recipientLanguages.length > 0) {
+    try {
+      await consumeTranslation(senderId);
+    } catch (err) {
+      if (err instanceof PlanLimitError) {
+        throw new HttpError(err.status, err.message);
+      }
+      throw err;
+    }
+    const result = await translateForRecipients(
+      text,
+      recipientLanguages,
+      languageHint,
+      glossaryRows,
+    );
+    translationMap = result.map;
+    detectedSource = result.detectedSource || languageHint;
+  }
+
+  const originalLanguage = detectedSource;
+
+  // 4. Save original message with detected language
   const message: DbMessage = await prisma.message.create({
     data: {
       chatId,
       senderId,
       originalText: text,
-      originalLanguage,
+      originalLanguage: toAppLang(originalLanguage),
       translatedText: null,
       translatedLanguage: null,
       isTranslated: false,
+      mediaUrl: media?.mediaUrl || null,
+      mediaType: media?.mediaType || null,
+      replyToId,
+      isE2e: false,
+      expiresAt,
+      viewOnce,
     },
   });
 
-  // 4. Compute distinct recipient languages (everyone except sender)
-  const recipients = chat.participants.filter((p) => p.userId !== senderId);
-  const recipientLanguages = recipients
-    .map((r) => normalizeLanguageCode(r.user.preferredLanguage))
-    .filter((lang) => lang !== originalLanguage); // no need to translate sender's own lang
-
-  // 5. Translate to each distinct recipient language
-  const translationMap = await translateForRecipients(
-    text,
-    recipientLanguages,
-    originalLanguage
-  );
-
   // Pick a canonical translation to persist on the message row.
-  // For single chats this is exactly the other participant's translation.
   let storedTranslation: { text: string; language: string } | null = null;
   if (recipientLanguages.length > 0) {
     const canonicalLang = recipientLanguages[0];
     const canonicalText = translationMap.get(canonicalLang);
     if (canonicalText && canonicalText !== text) {
-      storedTranslation = { text: canonicalText, language: canonicalLang };
+      storedTranslation = {
+        text: canonicalText,
+        language: toAppLang(canonicalLang),
+      };
     }
   }
 
-  // 6. Update the message with the canonical translation
+  // 5. Update the message with the canonical translation
   let updatedMessage: DbMessage = message;
   if (storedTranslation) {
     updatedMessage = await prisma.message.update({
@@ -232,10 +589,12 @@ export async function createAndBroadcastMessage(
       translatedLanguage = null;
       isTranslated = false;
     } else {
-      const t = translationMap.get(lang);
+      const t =
+        translationMap.get(lang) ??
+        translationMap.get(normalizeLanguageCode(lang));
       if (t && t !== updatedMessage.originalText) {
         translatedText = t;
-        translatedLanguage = lang;
+        translatedLanguage = toAppLang(lang);
         isTranslated = true;
       } else {
         // No translation available (same language as sender, or translation failed)
@@ -245,17 +604,17 @@ export async function createAndBroadcastMessage(
       }
     }
 
+    const base = serializeMessage(updatedMessage, senderInfo, {
+      replyTo: replyPreview,
+      viewerId: participant.userId,
+    });
     const perRecipientMessage: WsMessagePayload = {
-      id: updatedMessage.id,
-      chatId: updatedMessage.chatId,
-      senderId: updatedMessage.senderId,
-      sender: senderInfo,
+      ...base,
       originalText: updatedMessage.originalText,
       originalLanguage: updatedMessage.originalLanguage,
       translatedText,
       translatedLanguage,
       isTranslated,
-      createdAt: updatedMessage.createdAt.toISOString(),
     };
 
     sendToUser(participant.userId, {
@@ -265,8 +624,50 @@ export async function createAndBroadcastMessage(
     });
   }
 
+  // 8. Push to recipients (even if app is backgrounded / WS down).
+  const pushJobs = recipients.map((r) => {
+    const lang = normalizeLanguageCode(r.user.preferredLanguage);
+    const body =
+      (translationMap.get(lang) && translationMap.get(lang) !== text
+        ? translationMap.get(lang)
+        : text) || text;
+    const preview = viewOnce
+      ? media?.mediaType === 'audio'
+        ? '🎵 Audio · una vez'
+        : '📷 Foto · una vez'
+      : media?.mediaType === 'image'
+        ? '📷 Foto'
+        : media?.mediaType === 'audio'
+          ? '🎵 Audio'
+          : media?.mediaType === 'file'
+            ? '📄 Archivo'
+            : body;
+    return pushToUserTokens(
+      [(r.user as { pushToken?: string | null }).pushToken],
+      sender.name || sender.username,
+      preview.slice(0, 160),
+      { type: 'message', chatId, senderId },
+    );
+  });
+  void Promise.all(pushJobs).catch(() => undefined);
+
+  void import('../bots/notify')
+    .then(({ enqueueBotUpdatesForMessage }) =>
+      enqueueBotUpdatesForMessage({
+        chatId,
+        messageId: updatedMessage.id,
+        senderId,
+        text: updatedMessage.originalText || text,
+        isE2e: false,
+      }),
+    )
+    .catch(() => undefined);
+
   return {
-    message: serializeMessage(updatedMessage, senderInfo),
+    message: serializeMessage(updatedMessage, senderInfo, {
+      replyTo: replyPreview,
+      viewerId: senderId,
+    }),
     raw: updatedMessage,
   };
 }
@@ -278,10 +679,128 @@ interface ClientIncoming {
   type: string;
   chatId?: unknown;
   text?: unknown;
+  mediaUrl?: unknown;
+  mediaType?: unknown;
+  replyToId?: unknown;
+  viewOnce?: unknown;
+  callType?: unknown;
+  fromName?: unknown;
+  signal?: unknown;
 }
 
 function isString(v: unknown): v is string {
   return typeof v === 'string';
+}
+
+async function relayCallEvent(
+  userId: string,
+  data: ClientIncoming,
+  type: 'call_invite' | 'call_accept' | 'call_reject' | 'call_end',
+): Promise<void> {
+  const chatId = isString(data.chatId) ? data.chatId.trim() : '';
+  if (!chatId) return;
+
+  const participants = await prisma.chatParticipant.findMany({
+    where: { chatId },
+    select: { userId: true },
+  });
+  const me = participants.find((p) => p.userId === userId);
+  if (!me) return;
+
+  const callType =
+    data.callType === 'video' || data.callType === 'voice'
+      ? data.callType
+      : 'voice';
+  const fromName = isString(data.fromName) ? data.fromName : undefined;
+
+  const {
+    mintCallRoom,
+    rememberCallRoom,
+    getRememberedCallRoom,
+    clearCallRoom,
+  } = await import('../calls/config');
+
+  let callRoom: string | undefined;
+  if (type === 'call_invite') {
+    callRoom = mintCallRoom();
+    rememberCallRoom(chatId, callRoom);
+  } else if (type === 'call_accept') {
+    callRoom = getRememberedCallRoom(chatId) || mintCallRoom();
+    rememberCallRoom(chatId, callRoom);
+  } else if (type === 'call_end' || type === 'call_reject') {
+    clearCallRoom(chatId);
+  } else {
+    callRoom = getRememberedCallRoom(chatId) || undefined;
+  }
+
+  // Caller needs the opaque room too (invite/accept).
+  if (callRoom && (type === 'call_invite' || type === 'call_accept')) {
+    sendToUser(userId, {
+      type: 'call_room',
+      chatId,
+      callRoom,
+      callType,
+    });
+  }
+
+  let peerDelivered = 0;
+  const peerIds: string[] = [];
+  for (const p of participants) {
+    if (p.userId === userId) continue;
+    peerIds.push(p.userId);
+    peerDelivered += sendToUser(p.userId, {
+      type,
+      chatId,
+      fromUserId: userId,
+      fromName,
+      callType,
+      ...(callRoom ? { callRoom } : {}),
+    });
+  }
+
+  if (type === 'call_invite') {
+    const peerOnline =
+      peerDelivered > 0 || peerIds.some((id) => isUserConnected(id));
+    // HTTP fallback inbox so callee still sees the ring if WS is down.
+    if (callRoom) {
+      const { putPendingCall } = await import('../calls/pending');
+      for (const peerId of peerIds) {
+        putPendingCall({
+          chatId,
+          fromUserId: userId,
+          fromName,
+          toUserId: peerId,
+          callType,
+          callRoom,
+        });
+      }
+    }
+    // Tell caller immediately if the peer has a live Synap WS.
+    sendToUser(userId, {
+      type: 'call_ringing',
+      chatId,
+      callRoom,
+      callType,
+      peerOnline,
+    });
+
+    const others = await prisma.user.findMany({
+      where: { id: { in: peerIds } },
+      select: { pushToken: true },
+    });
+    void pushToUserTokens(
+      others.map((u) => u.pushToken),
+      fromName || 'Synap',
+      callType === 'video' ? 'Videollamada entrante' : 'Llamada entrante',
+      {
+        type: 'call_invite',
+        chatId,
+        callType,
+        ...(callRoom ? { callRoom } : {}),
+        ...(fromName ? { fromName } : {}),
+      },
+    );
+  }
 }
 
 function handleIncomingMessage(socket: WebSocket, userId: string, data: ClientIncoming): void {
@@ -290,10 +809,19 @@ function handleIncomingMessage(socket: WebSocket, userId: string, data: ClientIn
   if (data.type === 'message') {
     const chatId = isString(data.chatId) ? data.chatId.trim() : '';
     const text = isString(data.text) ? data.text : '';
+    const mediaUrl = isString(data.mediaUrl) ? data.mediaUrl : undefined;
+    const mediaType = isString(data.mediaType) ? data.mediaType : undefined;
+    const replyToId = isString(data.replyToId) ? data.replyToId : undefined;
+    const viewOnce = data.viewOnce === true;
 
     if (!chatId || !text.trim()) return;
 
-    createAndBroadcastMessage(chatId, userId, text).catch((err) => {
+    createAndBroadcastMessage(chatId, userId, text, {
+      mediaUrl,
+      mediaType,
+      replyToId,
+      viewOnce,
+    }).catch((err) => {
       // Send error back to the client if it's an HttpError
       const status = err?.status ?? 500;
       const message = err?.message ?? 'Internal error';
@@ -304,6 +832,66 @@ function handleIncomingMessage(socket: WebSocket, userId: string, data: ClientIn
         chatId,
       });
     });
+    return;
+  }
+
+  if (data.type === 'typing' || data.type === 'typing_stop') {
+    const chatId = isString(data.chatId) ? data.chatId.trim() : '';
+    if (!chatId) return;
+    void (async () => {
+      const participants = await prisma.chatParticipant.findMany({
+        where: { chatId },
+        select: { userId: true },
+      });
+      if (!participants.some((p) => p.userId === userId)) return;
+      for (const p of participants) {
+        if (p.userId === userId) continue;
+        sendToUser(p.userId, {
+          type: data.type,
+          chatId,
+          fromUserId: userId,
+        });
+      }
+    })();
+    return;
+  }
+
+  if (
+    data.type === 'call_invite' ||
+    data.type === 'call_accept' ||
+    data.type === 'call_reject' ||
+    data.type === 'call_end'
+  ) {
+    void relayCallEvent(userId, data, data.type);
+    return;
+  }
+
+  if (data.type === 'webrtc_signal') {
+    const chatId = isString(data.chatId) ? data.chatId.trim() : '';
+    if (!chatId || data.signal == null) return;
+    let encoded = '';
+    try {
+      encoded = JSON.stringify(data.signal);
+    } catch {
+      return;
+    }
+    if (encoded.length > 16_384) return; // drop oversized SDP/ICE floods
+    void (async () => {
+      const participants = await prisma.chatParticipant.findMany({
+        where: { chatId },
+        select: { userId: true },
+      });
+      if (!participants.some((p) => p.userId === userId)) return;
+      for (const p of participants) {
+        if (p.userId === userId) continue;
+        sendToUser(p.userId, {
+          type: 'webrtc_signal',
+          chatId,
+          fromUserId: userId,
+          signal: data.signal,
+        });
+      }
+    })();
     return;
   }
 
@@ -364,8 +952,12 @@ export function attachWebSocketServer(server: HttpServer): WebSocketServer {
       return;
     }
 
+    const wasOffline = getUserConnections(userId).size === 0;
     addConnection(userId, socket);
     safeSend(socket, { type: 'connected', userId });
+    if (wasOffline) {
+      void broadcastPresence(userId, true);
+    }
 
     socket.on('message', (raw) => {
       let data: ClientIncoming;
@@ -380,10 +972,16 @@ export function attachWebSocketServer(server: HttpServer): WebSocketServer {
 
     socket.on('close', () => {
       removeConnection(userId, socket);
+      if (getUserConnections(userId).size === 0) {
+        void broadcastPresence(userId, false);
+      }
     });
 
     socket.on('error', () => {
       removeConnection(userId, socket);
+      if (getUserConnections(userId).size === 0) {
+        void broadcastPresence(userId, false);
+      }
     });
   });
 

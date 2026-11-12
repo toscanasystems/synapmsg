@@ -59,6 +59,13 @@ export async function authMiddleware(
       ...payload,
       id: payload.sub,
     };
+    // Heartbeat for Dead Man's Switch (best-effort, non-blocking).
+    void prisma.user
+      .update({
+        where: { id: payload.sub },
+        data: { lastActiveAt: new Date() },
+      })
+      .catch(() => undefined);
     next();
   } catch (err) {
     next(err);

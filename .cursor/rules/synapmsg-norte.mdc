@@ -1,0 +1,14 @@
+---
+description: Synapmsg product north star — absolute security + native translation
+alwaysApply: true
+---
+
+# Synapmsg north star
+
+Follow root `.cursorrules`, `SYNAPMSG_NORTE.md`, and `docs/comparativa-synapmsg-norte.pdf`.
+
+- Brand teal `#30B0B0`; mobile colors from `apps/mobile/src/theme/colors.ts`.
+- Evolve the living monorepo (`apps/api`, `apps/mobile`, `apps/landing`, `apps/media-worker`) — do not replace with a greenfield Turbo scaffold.
+- Decision order: absolute security → translation → WhatsApp parity → ecosystem.
+- Phase prompts live in `.cursor-prompts.md`. Threat model in `SECURITY.md`.
+- Never store E2E plaintext on the server; never commit secrets.

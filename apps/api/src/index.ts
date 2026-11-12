@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import http from 'http';
+import path from 'path';
 import express, { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -8,7 +9,25 @@ import authRouter from './auth/routes';
 import usersRouter from './users/routes';
 import chatsRouter from './chats/routes';
 import messagesRouter from './messages/routes';
+import mediaRouter from './media/routes';
+import billingRouter from './billing/routes';
+import e2eRouter from './e2e/routes';
+import securityRouter from './security/routes';
+import botsRouter from './bots/routes';
+import walletRouter from './wallet/routes';
+import { stripeWebhookHandler } from './billing/webhook';
+import { recurrenteWebhookHandler } from './billing/recurrenteWebhook';
+import { PlanLimitError } from './billing/usage';
 import { attachWebSocketServer } from './messages/websocket';
+import { startMessageScheduler, stopMessageScheduler } from './messages/scheduler';
+import {
+  startExpireScheduler,
+  stopExpireScheduler,
+} from './messages/expireScheduler';
+import { startDmsScheduler, stopDmsScheduler } from './security/dmsScheduler';
+import { getCallConfig } from './calls/config';
+import callsRouter from './calls/routes';
+import { authMiddleware } from './middleware/auth';
 
 const PORT = Number(process.env.PORT) || 3000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
@@ -27,17 +46,47 @@ app.use(
     credentials: true,
   })
 );
-app.use(express.json({ limit: '1mb' }));
+// Force UTF-8 on every JSON response (fixes broken accents/tildes on clients).
+app.use((req, res, next) => {
+  const originalJson = res.json.bind(res);
+  res.json = ((body: unknown) => {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    return originalJson(body);
+  }) as typeof res.json;
+  next();
+});
+
+// Payment webhooks need the raw body for signature verification — before JSON parser.
+app.post(
+  '/billing/webhook',
+  express.raw({ type: 'application/json' }),
+  (req, res) => {
+    void stripeWebhookHandler(req, res);
+  },
+);
+app.post(
+  '/billing/webhook/recurrente',
+  express.raw({ type: 'application/json' }),
+  (req, res) => {
+    void recurrenteWebhookHandler(req, res);
+  },
+);
+
+// Base64 media uploads ≈ 4/3 of file size; free plan allows 25 MB files.
+app.use(express.json({ limit: '40mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Trust the first proxy (so req.ip / X-Forwarded-* work behind Supabase / nginx)
 app.set('trust proxy', 1);
 
-// Request logging (lightweight, dev-only)
+// Request logging — redact secrets in query/path
 if (NODE_ENV !== 'test') {
   app.use((req: Request, _res: Response, next: NextFunction) => {
+    const safe = req.url
+      .replace(/([?&]token=)[^&]*/gi, '$1[REDACTED]')
+      .replace(/\/bots\/synbot_[^/?#]+/gi, '/bots/synbot_[REDACTED]');
     // eslint-disable-next-line no-console
-    console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+    console.log(`${new Date().toISOString()} ${req.method} ${safe}`);
     next();
   });
 }
@@ -49,14 +98,92 @@ app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', service: 'synapmsg-api', time: new Date().toISOString() });
 });
 
+app.use('/security', express.static(path.join(__dirname, '..', 'public', 'security')));
+
+// Call media: Jitsi SFU (default) or P2P WebRTC fallback. Signaling stays on Synap WS.
+// Public: engine + STUN only. Authenticated: includes TURN credentials when configured.
+app.get('/call/config', (req: Request, res: Response, next: NextFunction) => {
+  const auth = req.headers.authorization;
+  if (auth?.startsWith('Bearer ')) {
+    void authMiddleware(req, res, (err?: unknown) => {
+      if (err) {
+        next(err);
+        return;
+      }
+      if (!req.user) {
+        res.json(getCallConfig({ includeTurnCredentials: false }));
+        return;
+      }
+      res.json(getCallConfig({ includeTurnCredentials: true }));
+    });
+    return;
+  }
+  res.json(getCallConfig({ includeTurnCredentials: false }));
+});
+
+app.get('/call', (req: Request, res: Response) => {
+  const cfg = getCallConfig();
+  const engineParam = String(req.query.engine || '');
+  const engine =
+    engineParam === 'webrtc' || engineParam === 'jitsi'
+      ? engineParam
+      : cfg.engine;
+  const isJitsi = engine === 'jitsi';
+  const jitsiHost = String(req.query.jitsi || cfg.jitsiDomain).replace(
+    /^https?:\/\//,
+    '',
+  );
+  if (isJitsi) {
+    res.setHeader(
+      'Content-Security-Policy',
+      [
+        "default-src 'self' https:",
+        `script-src 'self' 'unsafe-inline' https://${jitsiHost} https://*.jitsi.net https://*.jit.si`,
+        "style-src 'self' 'unsafe-inline' https:",
+        `frame-src https://${jitsiHost} https://*.jitsi.net https://*.jit.si blob:`,
+        "media-src 'self' blob: mediastream: https:",
+        "connect-src 'self' wss: ws: https: stun: turn:",
+        "img-src 'self' data: blob: https:",
+      ].join('; '),
+    );
+  } else {
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; media-src 'self' blob: mediastream:; connect-src 'self' wss: ws: https: stun: turn:; img-src 'self' data: blob:;",
+    );
+  }
+  res.setHeader(
+    'Permissions-Policy',
+    'camera=(self), microphone=(self), display-capture=(self)',
+  );
+  // Allow Jitsi iframe / WebRTC in WebView (helmet CORP can block third-party media).
+  res.removeHeader('Cross-Origin-Resource-Policy');
+  res.removeHeader('Cross-Origin-Embedder-Policy');
+  res.sendFile(
+    path.join(
+      __dirname,
+      '..',
+      'public',
+      isJitsi ? 'call-jitsi.html' : 'call.html',
+    ),
+  );
+});
+
 // ───────────────────────────────────────────────────────────
 // Routes
 // ───────────────────────────────────────────────────────────
 app.use('/auth', authRouter);
 app.use('/users', usersRouter);
+app.use('/media', mediaRouter);
+app.use('/billing', billingRouter);
+app.use('/e2e', e2eRouter);
+app.use('/security', securityRouter);
+app.use('/bots', botsRouter);
+app.use('/wallet', walletRouter);
 app.use('/chats', chatsRouter);
 // Messages router handles /chats/:chatId/messages (mounted alongside chats router)
 app.use('/chats', messagesRouter);
+app.use('/calls', callsRouter);
 
 // ───────────────────────────────────────────────────────────
 // 404
@@ -82,14 +209,37 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
     return;
   }
 
+  if (err instanceof PlanLimitError) {
+    res.status(err.status).json({ error: err.message, code: err.code });
+    return;
+  }
+
+  const anyStatus = (err as Error & { status?: number; statusCode?: number })
+    .status
+    ?? (err as Error & { statusCode?: number }).statusCode
+    ?? 500;
+
+  // Bad JSON body → clear 400 (not a mysterious 500)
+  if (
+    anyStatus === 400 ||
+    (err instanceof SyntaxError && 'body' in (err as object))
+  ) {
+    res.status(400).json({
+      error: 'Pedido inválido. Revisá los datos e intentá de nuevo.',
+      code: 'bad_request',
+    });
+    return;
+  }
+
   // eslint-disable-next-line no-console
   console.error('[unhandled error]', err);
-  const status = (err as Error & { status?: number }).status ?? 500;
+  const status = anyStatus;
   const message =
     NODE_ENV === 'production' && status >= 500
-      ? 'Internal server error'
-      : err.message || 'Internal server error';
-  res.status(status).json({ error: message });
+      ? 'El servidor tuvo un problema. Intentá de nuevo.'
+      : err.message || 'El servidor tuvo un problema. Intentá de nuevo.';
+  const code = (err as Error & { code?: string }).code;
+  res.status(status).json(code ? { error: message, code } : { error: message });
 });
 
 // ───────────────────────────────────────────────────────────
@@ -117,6 +267,9 @@ async function start(): Promise<void> {
     console.log(`  REST:      http://localhost:${PORT}`);
     // eslint-disable-next-line no-console
     console.log(`  WebSocket: ws://localhost:${PORT}/ws?token=JWT`);
+    startMessageScheduler();
+    startExpireScheduler();
+    startDmsScheduler();
   });
 }
 
@@ -127,6 +280,9 @@ async function shutdown(signal: string): Promise<void> {
   shuttingDown = true;
   // eslint-disable-next-line no-console
   console.log(`\n[shutdown] received ${signal}, closing server...`);
+  stopMessageScheduler();
+  stopExpireScheduler();
+  stopDmsScheduler();
   server.close();
   try {
     await prisma.$disconnect();

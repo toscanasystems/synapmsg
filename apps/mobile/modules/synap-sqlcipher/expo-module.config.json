@@ -1,0 +1,9 @@
+{
+  "platforms": ["android", "ios"],
+  "android": {
+    "modules": ["expo.modules.synapsqlcipher.SynapSqlCipherModule"]
+  },
+  "ios": {
+    "modules": ["SynapSqlCipherModule"]
+  }
+}

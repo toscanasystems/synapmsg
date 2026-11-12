@@ -1,0 +1,224 @@
+Comparativa: WhatsApp vs Telegram vs Signal vs Synapmsg
+Característica WhatsApp Telegram Signal Synapmsg
+Información general
+Empresa propietaria
+Año de lanzamiento 2009 2013 2014 A definir (MVP en 2 días)
+Usuarios activos mensuales Más de 2.000 millones Más de 900 millones 70-100 millones (2024-2025) 0 → meta 1M en año 1
+Mercado principal Global (fuera de China) Global (fuera de China) LatAm inicial
+Modelo de negocio
+Código abierto No (cliente cerrado) Cliente abierto; servidor core cerrado
+Censura / vigilancia Sin censura; cifrado E2E por defecto
+Mensajería y chats
+Cifrado predeterminado E2E en chats personales
+Protocolo de cifrado Signal Protocol (libsignal) MTProto v2 (propietario) Signal Protocol (libsignal) en v1.1
+Mensajes temporales Sí (1 s a 1 semana) ✓ Sí (1 s a 1 año, más granular)
+Mensajes programados Sí Sí (más flexible) No ✓ Sí (con repeticiones: diario, semanal)
+Edición de mensajes Hasta 15 min después Hasta 48 h después Sin límite documentado ✓ Hasta 48 h (heredado de Telegram)
+Chats secretos No necesario (todos son E2E)
+Carpeta de chats Sí (limitado) No (lista plana)
+Grupos y comunidades
+1.024 miembros 200.000 miembros ✓ 200.000 (heredado de Telegram)
+Canales de difusión Sí (seguidores ilimitados) Sí (seguidores ilimitados) No nativo (solo grupos) ✓ Sí, con analítica de lectura
+Meta Platforms 
+(Facebook)
+Telegram FZ-LLC 
+(independiente)
+Signal Foundation (sin fines 
+de lucro, 501c3)
+Startup independiente (Toscana Systems, 
+S.A.)
+Global (comunidades pro-
+privacidad)
+Publicidad en Status y 
+WhatsApp Business
+Suscripción Premium + 
+donaciones (sin anuncios)
+Donaciones + sin anuncios 
+(nonprofit)
+Freemium: gratis con límites + Premium 
+sin anuncios
+Sí (cliente abierto, 
+servidor parcial)
+Sí (cliente + servidor, 
+AGPL-3.0)
+Cumple leyes locales (p. 
+ej. Alemania, India)
+Bloqueado en China, 
+Rusia, Irán
+Sin censura; mínimo 
+metadata
+Cliente-servidor; E2E solo 
+en chats secretos
+✓ E2E por defecto en TODOS 
+los chats (Signal Protocol)
+✓ E2E por defecto + elección de modo 
+nube por chat
+Signal Protocol (su 
+implementación original)
+Sí (24 h, 7 d, 90 d, 
+personalizado)
+Sí (desde 30 s hasta 1 
+semana)
+No (todos los chats son 
+E2E)
+Sí (E2E + 
+autodestrucción)
+✓ Sí, pero opcionales; usuario elige por 
+chat
+Sí (múltiples carpetas 
+personalizables)
+★ Carpetas automáticas con IA + 
+manuales
+Límite de miembros por 
+grupo
+1.000 miembros (límite 
+estricto)
+Característica WhatsApp Telegram Signal Synapmsg
+Bots en grupos Limitado No soporta bots
+Multimedia y archivos
+2 GB ✓ 4 GB para todos
+Almacenamiento en la nube No (solo backup local) No (solo backup local cifrado)
+Calidad de fotos/videos Comprimida (HD opcional) Sin compresión por defecto ✓ Sin compresión por defecto
+Stickers y GIFs Sí (catálogos oficiales) Sí (creación más abierta) ✓ Creación abierta + mercado de stickers
+Llamadas y video
+Llamadas de voz Hasta 32 participantes Individuales y grupales ✓ Hasta 50 (con subtítulos en vivo)
+Videollamadas Hasta 32 participantes Hasta 40 participantes ✓ Hasta 50 activos + 1.000 espectadores
+Compartir pantalla Sí Sí Sí ✓ Sí
+Protección IP en llamadas No No Planificado para v1.1
+Privacidad y seguridad
+Verificación de seguridad ✓ Código de seguridad + verificación QR
+Número de teléfono visible Sí (a contactos)
+Cuenta sin SIM No ✓ Sí, login con email o número virtual
+Bloqueo con PIN/huella Sí (Touch ID/Face ID) Sí (PIN + biometría)
+Registro de metadata Mínimo (solo email o número)
+Sí (entrega metadata) Sí (entrega metadata e IP) Solo bajo orden judicial estricta
+Personalización y extras
+Temas de interfaz Temas personalizados Claro / Oscuro (limitado)
+Reacciones a mensajes Sí (6 predeterminadas) Sí (más con Premium) Sí (cualquier emoji, limitado) ✓ Sí, personalizadas y sin límite
+Amplio ecosistema de 
+bots
+✓ Bot API potente (heredado de 
+Telegram)
+Límite de tamaño de 
+archivo
+2 GB (gratis) / 4 GB 
+(Premium)
+200 MB (actualizado julio 
+2026, era 100 MB)
+Sí (chat guardado 
+ilimitado)
+✓ Sí, con cuota clara (gratis 5 GB, 
+Premium ilimitado)
+Sin compresión en 
+'archivo'
+Sí (creación abierta, packs 
+cifrados)
+Hasta 40 participantes (con IP 
+relay)
+Hasta 30 (1.000 como 
+espectadores)
+Sí (relay por defecto para no-
+contactos)
+Código de seguridad por 
+chat
+Clave secreta en chats 
+secretos
+Código de seguridad + 
+número de seguridad + 
+escaneo QR
+Se puede ocultar; usar 
+@usuario
+Se puede ocultar (username 
+añadido en marzo 2024)
+✓ Se puede ocultar; login opcional con 
+email
+Sí (compatible con SIM 
+virtual)
+No (requiere número, aunque 
+puede ser virtual)
+Sí (PIN + biometría + frase de 
+recuperación)
+✓ PIN + biometría + frase de 
+recuperación
+Alto (registra contacto, 
+horarios)
+Medio (registra IP, 
+contacto)
+Mínimo (solo número de 
+teléfono, último acceso)
+Cumplimiento con 
+citaciones judiciales
+Sí, pero solo confirma si el 
+número es usuario + último 
+acceso
+Claro / Oscuro / 
+Configuración de chat
+✓ Temas personalizados + modo acceso 
+universal
+Característica WhatsApp Telegram Signal Synapmsg
+Encuestas y cuestionarios Sí No nativo ✓ Sí (heredado de Telegram)
+Multi-cuenta Hasta 2 cuentas Hasta 3 (Premium: 4) 1 cuenta por número ✓ Hasta 5 cuentas (gratis 3)
+Multidispositivo sin teléfono Limitado a 4 dispositivos Ilimitado, en la nube ✓ Ilimitado, en la nube
+Apps de escritorio Sí (Windows, Mac) Sí (Windows, Mac, Linux) Sí (Windows, Mac, Linux) Planificado para v2
+Traducción nativa integrada (diferenciador Synapmsg)
+Idiomas soportados — ~30 idiomas (Premium) —
+Modo privacidad on-device No No No
+No No No ★ Sí (fasttext, sin selección manual)
+Glosario personalizado No No No
+Indicador visual — —
+★ Diferenciadores propios de Synapmsg
+No No No (todos E2E por defecto)
+Carpeta inteligente con IA No No No
+No (requiere teléfono) No (requiere teléfono) No (requiere teléfono)
+Solo en algunos países Solo vía bots No ★ Billetera P2P integrada para LatAm
+No No No
+Sí (anónimas, públicas, 
+quiz)
+Sí, dispositivos vinculados (sin 
+teléfono)
+Traducción automática en 
+tiempo real
+No (requiere Google 
+Translate externo)
+Limitado (Premium, 
+traducción de cliente)
+No (no tiene traducción 
+nativa)
+★ Sí: escribes en tu idioma, receptor 
+recibe en el suyo
+★ 100+ idiomas (incluye quechua, 
+guaraní, maya k'iche')
+★ Sí (Whisper.cpp local, sin que el 
+mensaje salga del teléfono)
+Detección automática de 
+idioma
+★ Sí (jerga, nombres propios, 
+traducciones personalizadas)
+Etiqueta discreta en 
+Premium
+★ '  Traducido del [idioma]' con tap para 🌐
+ver original
+Modo híbrido de privacidad 
+por chat
+★ Usuario elige por chat: 'Privado E2E' o 
+'Nube sincronizada'
+★ Clasifica y prioriza chats 
+automáticamente por tema y urgencia
+Login con email como 
+alternativa
+★ Permite usar email como alternativa al 
+número
+Pagos P2P nativos (fuera de 
+China)
+Asistente de redacción con 
+IA
+★ Sugiere respuestas, corrige tono, 
+resume hilos largos
+Característica WhatsApp Telegram Signal Synapmsg
+No No NoTraducción para LatAm 
+bilingüe
+★ Enfoque inicial en LatAm (español-
+inglés-portugués)
+Leyenda:  ★ = Característica diferenciadora propia (no existe en WhatsApp/Telegram/Signal).  ✓ = Característica heredada o mejorada.  La columna Synapmsg está resaltada en verde.
+Fuentes: Signal — Wikipedia (70-100M MAU 2024-2025), Signal.org, businessofapps.com, backlinko.com, aboutsignal.com (límite 200 MB julio 2026), Mozilla Privacy Review. WhatsApp/Telegram — 
+comparativa anterior. Datos referenciales a noviembre 2025.
