@@ -55,8 +55,8 @@ export function BootstrapScreen(): JSX.Element {
       <View style={styles.warningBox}>
         <Feather name="alert-triangle" size={22} color={colors.warning ?? '#F5A623'} />
         <Text style={styles.warningText}>
-          En la siguiente pantalla te damos un código de 12 caracteres. Apúntalo en
-          papel: es la única forma de recuperar tu cuenta si pierdes el teléfono.
+          Apuntá tu código de 12 caracteres en papel. Es la única forma de
+          recuperar tu cuenta.
         </Text>
       </View>
 

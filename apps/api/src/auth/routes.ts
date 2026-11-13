@@ -359,7 +359,7 @@ router.post('/bootstrap', registerIpLimit, async (req: Request, res: Response, n
       user: serializeUser(user),
       recoveryCode,
       warning:
-        'Apunta tu código de recuperación en papel. Sin él no podrás recuperar la cuenta si pierdes el teléfono.',
+        'Apuntá tu código de 12 caracteres en papel. Es la única forma de recuperar tu cuenta.',
     });
   } catch (err) {
     next(err);

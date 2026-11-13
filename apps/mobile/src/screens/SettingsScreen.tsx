@@ -659,7 +659,7 @@ export function SettingsScreen(): JSX.Element {
                 {user.email}
               </Text>
             ) : (
-              <Text style={styles.profileMeta}>Sin correo de recuperación</Text>
+              <Text style={styles.profileMeta}>Sin correo de avisos</Text>
             )}
           </View>
           <Feather name="edit-2" size={20} color={colors.accent} />
@@ -723,8 +723,8 @@ export function SettingsScreen(): JSX.Element {
               <SettingsRow
                 icon="mail"
                 iconBg="#107090"
-                title="Agregar correo (opcional)"
-                subtitle="Extra. La recuperación principal es el código de 12 caracteres."
+                title="Agregar correo para recibir avisos"
+                subtitle="No sirve para recuperar la cuenta. Para eso está tu código de 12 caracteres."
                 onPress={() => {
                   setEmailDraft('');
                   setEmailModalOpen(true);
@@ -749,8 +749,8 @@ export function SettingsScreen(): JSX.Element {
               <SettingsRow
                 icon="mail"
                 iconBg="#107090"
-                title="Agregar correo (opcional)"
-                subtitle="Extra. La recuperación principal es el código de 12 caracteres."
+                title="Agregar correo para recibir avisos"
+                subtitle="No sirve para recuperar la cuenta. Para eso está tu código de 12 caracteres."
                 onPress={() => {
                   setEmailDraft('');
                   setEmailModalOpen(true);
@@ -1927,7 +1927,7 @@ export function SettingsScreen(): JSX.Element {
         </Pressable>
       </Modal>
 
-      {/* Optional recovery email */}
+      {/* Optional notice email (not for account recovery) */}
       <Modal
         visible={emailModalOpen}
         transparent
@@ -1942,9 +1942,12 @@ export function SettingsScreen(): JSX.Element {
             style={styles.editCard}
             onPress={(e) => e.stopPropagation()}
           >
-            <Text style={styles.modalTitle}>Agregar correo para recuperar</Text>
+            <Text style={styles.modalTitle}>
+              Agregar correo para recibir avisos
+            </Text>
             <Text style={{ color: colors.textSecondary, marginBottom: spacing.md }}>
-              Opcional. Solo para recuperar la cuenta más adelante.
+              No sirve para recuperar la cuenta. Para eso está tu código de 12
+              caracteres.
             </Text>
             <TextInput
               value={emailDraft}

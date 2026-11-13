@@ -17,7 +17,7 @@ const faqs = [
   },
   {
     q: "¿Dónde descargo Android?",
-    a: "En synapmsg.ai — botón Descargar Android (APK). Instalá y creá tu cuenta con email.",
+    a: "En synapmsg.ai — botón Descargar Android (APK). Instalá y ya tenés cuenta (número de 10 dígitos). El correo es opcional y solo sirve para avisos; la recuperación es con el código de 12 caracteres.",
   },
   {
     q: "¿Cuánto cuesta Premium?",

@@ -57,7 +57,7 @@ export type PlanId = 'free' | 'premium';
 
 export interface User {
   id: string;
-  /** Optional — anonymous bootstrap accounts have null until recovery email is added. */
+  /** Optional — for notices only; account recovery uses the 12-char code. */
   email: string | null;
   username: string;
   name: string;
