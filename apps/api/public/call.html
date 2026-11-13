@@ -14,7 +14,8 @@
       position: absolute; right: 12px; top: 12px; width: 112px; height: 160px;
       border-radius: 12px; border: 2px solid #30B0B0; z-index: 2; transform: scaleX(-1);
     }
-    #local.audio-only { display: none; }
+    #local.rear { transform: scaleX(1); }
+    #local.audio-only, #local.cam-off { display: none; }
     #banner {
       position: absolute; left: 0; right: 0; bottom: 148px; text-align: center;
       z-index: 3; padding: 0 16px; pointer-events: none;
@@ -40,7 +41,7 @@
     }
     #controls {
       position: absolute; left: 0; right: 0; bottom: 16px; display: flex;
-      justify-content: center; gap: 14px; z-index: 4;
+      justify-content: center; gap: 12px; z-index: 4; flex-wrap: wrap;
     }
     button.ctrl {
       width: 52px; height: 52px; border-radius: 26px; border: none; font-size: 20px;
@@ -59,8 +60,9 @@
     <div id="banner"><div id="status">Conectando…</div></div>
     <div id="captions"><div class="who" id="capWho"></div><div id="capText"></div></div>
     <div id="controls">
-      <button class="ctrl" id="muteMic" title="Mic">🎤</button>
+      <button class="ctrl" id="muteMic" title="Micrófono">🎤</button>
       <button class="ctrl" id="muteCam" title="Cámara">📷</button>
+      <button class="ctrl" id="flipCam" title="Cambiar cámara">🔄</button>
       <button class="ctrl" id="ccBtn" title="Subtítulos">CC</button>
       <button class="ctrl" id="hang" title="Colgar">📞</button>
     </div>
@@ -70,7 +72,7 @@
   const params = new URLSearchParams(location.search);
   const token = params.get('token') || '';
   const chatId = params.get('chatId') || '';
-  const video = params.get('video') !== '0';
+  let wantVideo = params.get('video') !== '0';
   const displayName = params.get('name') || 'Synapmsg';
   const role = params.get('role') || 'caller';
   const preferLang = (params.get('lang') || 'es').toLowerCase();
@@ -85,6 +87,7 @@
   const peerName = document.getElementById('peerName');
   const muteMicBtn = document.getElementById('muteMic');
   const muteCamBtn = document.getElementById('muteCam');
+  const flipCamBtn = document.getElementById('flipCam');
   const ccBtn = document.getElementById('ccBtn');
   const captionsEl = document.getElementById('captions');
   const capWho = document.getElementById('capWho');
@@ -92,11 +95,20 @@
 
   initials.textContent = (displayName.trim()[0] || 'S').toUpperCase();
   peerName.textContent = displayName;
-  if (!video) {
-    localVideo.classList.add('audio-only');
-    avatar.classList.add('show');
-    muteCamBtn.style.display = 'none';
+
+  function setVideoUiMode() {
+    if (!wantVideo) {
+      localVideo.classList.add('audio-only');
+      avatar.classList.add('show');
+      muteCamBtn.style.display = 'none';
+      flipCamBtn.style.display = 'none';
+    } else {
+      localVideo.classList.remove('audio-only');
+      muteCamBtn.style.display = '';
+      flipCamBtn.style.display = '';
+    }
   }
+  setVideoUiMode();
 
   function setStatus(t) { statusEl.textContent = t; }
   function postNative(obj) {
@@ -107,14 +119,13 @@
 
   let pc = null;
   let localStream = null;
-  /** Reserva cámara secundaria (trasera/delantera) para exclusividad vs otras apps */
-  let reservedCamStream = null;
   let ws = null;
   let polite = role === 'callee';
   let makingOffer = false;
   let ignoreOffer = false;
   let micOn = true;
-  let camOn = video;
+  let camOn = wantVideo;
+  let facingMode = 'user'; // frontal por defecto
   let peerReady = false;
   let offerSent = false;
   let captionsOn = false;
@@ -123,15 +134,44 @@
   let iceRestartCount = 0;
   let wsRetry = 0;
   let wsRetryTimer = null;
+  let adaptTimer = null;
+  let wakeLock = null;
+  let qualityLevel = 0; // 0 best … 3 lowest send; 4 = video send off (audio kept)
+  let goodStreak = 0;
   const pendingIce = [];
+
+  const QUALITY = [
+    { w: 640, h: 480, fps: 24 },
+    { w: 480, h: 360, fps: 20 },
+    { w: 320, h: 240, fps: 15 },
+    { w: 160, h: 120, fps: 10 },
+  ];
 
   let iceServers = [
     { urls: 'stun:stun.cloudflare.com:3478' },
   ];
-  // PIEZA 2: relay by default — peer never learns our host/srflx IP.
+  // PIEZA 2/3: relay by default — peer never learns host/srflx IP (audio+video).
   let iceTransportPolicy = 'relay';
   const allowDirectParam = params.get('allowDirect') === '1';
   const seenRemoteIps = [];
+
+  async function holdWakeLock() {
+    try {
+      if (navigator.wakeLock && navigator.wakeLock.request) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => {
+          wakeLock = null;
+        });
+        postNative({ type: 'wake-lock', on: true });
+      }
+    } catch (_) {
+      postNative({ type: 'wake-lock', on: false });
+    }
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !hungUp) void holdWakeLock();
+  });
 
   async function loadIceFromConfig() {
     try {
@@ -147,7 +187,6 @@
       if (cfg.iceTransportPolicy === 'relay' || cfg.iceTransportPolicy === 'all') {
         iceTransportPolicy = cfg.iceTransportPolicy;
       }
-      // Never allow "all" unless server said so (trusted).
       if (!allowDirectParam) iceTransportPolicy = 'relay';
       postNative({
         type: 'ice-config',
@@ -161,7 +200,6 @@
   function ipFromCandidate(cand) {
     if (!cand) return null;
     const s = typeof cand === 'string' ? cand : (cand.candidate || '');
-    // candidate:... foundation component protocol priority ip port typ ...
     const m = s.match(/\s(\d{1,3}(?:\.\d{1,3}){3})\s+\d+\s+typ\s+(\w+)/);
     if (m) return { ip: m[1], typ: m[2] };
     const m6 = s.match(/\s([0-9a-fA-F:]+)\s+\d+\s+typ\s+(\w+)/);
@@ -183,28 +221,104 @@
     } catch (_) {}
   }
 
-  /** En videollamada: abre la otra cámara y la mantiene viva (sin enviar) para bloquearla. */
-  async function lockSecondaryCamera() {
-    if (!video || reservedCamStream) return;
-    try {
-      reservedCamStream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: {
-          facingMode: { exact: 'environment' },
-          width: { ideal: 320 },
-          height: { ideal: 240 },
-        },
-      });
-      // Mantener tracks activos pero silenciados (no se muestran ni se envían)
-      reservedCamStream.getVideoTracks().forEach((t) => {
-        t.enabled = true;
-        try { t.contentHint = 'motion'; } catch (_) {}
-      });
-      postNative({ type: 'camera-locked', both: true });
-    } catch (_) {
-      // Muchos Android solo permiten una cámara a la vez: la primaria ya la bloquea
-      postNative({ type: 'camera-locked', both: false });
+  function videoConstraints(face, level) {
+    const q = QUALITY[Math.min(level, QUALITY.length - 1)];
+    return {
+      facingMode: { ideal: face },
+      width: { ideal: q.w },
+      height: { ideal: q.h },
+      frameRate: { ideal: q.fps, max: q.fps },
+    };
+  }
+
+  async function applyVideoQuality(level) {
+    if (!localStream || !wantVideo) return;
+    const track = localStream.getVideoTracks()[0];
+    if (!track) return;
+    if (level >= 4) {
+      track.enabled = false;
+      localVideo.classList.add('cam-off');
+      postNative({ type: 'video-quality', level: 4, note: 'video paused for network; audio kept' });
+      return;
     }
+    if (camOn) {
+      track.enabled = true;
+      localVideo.classList.remove('cam-off');
+    }
+    const q = QUALITY[level];
+    try {
+      await track.applyConstraints({
+        width: { ideal: q.w },
+        height: { ideal: q.h },
+        frameRate: { ideal: q.fps, max: q.fps },
+      });
+      postNative({ type: 'video-quality', level: level, w: q.w, h: q.h, fps: q.fps });
+    } catch (_) {}
+  }
+
+  async function adaptFromStats() {
+    if (!pc || hungUp || !wantVideo) return;
+    try {
+      const stats = await pc.getStats();
+      let rtt = 0;
+      let loss = 0;
+      let packetsSent = 0;
+      let packetsLost = 0;
+      let availableOut = null;
+      stats.forEach((r) => {
+        if (r.type === 'candidate-pair' && (r.selected || r.nominated) && r.state === 'succeeded') {
+          if (typeof r.currentRoundTripTime === 'number') rtt = r.currentRoundTripTime * 1000;
+          if (typeof r.availableOutgoingBitrate === 'number') availableOut = r.availableOutgoingBitrate;
+        }
+        if (r.type === 'outbound-rtp' && r.kind === 'video') {
+          packetsSent = r.packetsSent || 0;
+          packetsLost = r.packetsLost || 0;
+        }
+        if (r.type === 'remote-inbound-rtp' && r.kind === 'video') {
+          if (typeof r.packetsLost === 'number') packetsLost = r.packetsLost;
+          if (typeof r.roundTripTime === 'number') rtt = Math.max(rtt, r.roundTripTime * 1000);
+          if (typeof r.fractionLost === 'number') loss = r.fractionLost;
+        }
+      });
+      if (packetsSent > 40) loss = Math.max(loss, packetsLost / Math.max(1, packetsSent));
+
+      const bad =
+        rtt > 450 ||
+        loss > 0.08 ||
+        (availableOut != null && availableOut > 0 && availableOut < 180000);
+      const good =
+        rtt > 0 &&
+        rtt < 220 &&
+        loss < 0.02 &&
+        (availableOut == null || availableOut > 400000);
+
+      if (bad) {
+        goodStreak = 0;
+        if (qualityLevel < 4) {
+          qualityLevel += 1;
+          // Never touch audio — only video constraints / send enable.
+          await applyVideoQuality(qualityLevel);
+          setStatus(
+            (iceTransportPolicy === 'relay' ? 'Conectado · relé' : 'Conectado') +
+              '\nRed lenta · bajando video (audio intacto)',
+          );
+        }
+      } else if (good) {
+        goodStreak += 1;
+        if (goodStreak >= 3 && qualityLevel > 0) {
+          qualityLevel -= 1;
+          goodStreak = 0;
+          await applyVideoQuality(qualityLevel);
+        }
+      } else {
+        goodStreak = 0;
+      }
+    } catch (_) {}
+  }
+
+  function startAdaptLoop() {
+    if (adaptTimer) clearInterval(adaptTimer);
+    adaptTimer = setInterval(() => { void adaptFromStats(); }, 3000);
   }
 
   async function ensureMedia() {
@@ -213,13 +327,18 @@
       throw new Error('Este WebView no soporta cámara/micrófono');
     }
 
-    // Llamada de voz: SOLO micrófono — nunca pedir ni abrir cámara
-    if (!video) {
+    const audioConstraints = {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    };
+
+    // Llamada de voz o fallback: SOLO micrófono
+    if (!wantVideo) {
       localStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: audioConstraints,
         video: false,
       });
-      // Defensa: si el WebView inyectara video, matarlo al instante
       localStream.getVideoTracks().forEach((t) => {
         try { t.stop(); localStream.removeTrack(t); } catch (_) {}
       });
@@ -228,23 +347,40 @@
       return localStream;
     }
 
-    // Videollamada: abrir frontal con constraints estrictos y mantenerla abierta
-    localStream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      video: {
-        facingMode: { ideal: 'user' },
-        width: { ideal: 640 },
-        height: { ideal: 480 },
-      },
-    });
-    localStream.getVideoTracks().forEach((t) => {
-      t.enabled = true;
-      try { t.contentHint = 'motion'; } catch (_) {}
-    });
-    localVideo.srcObject = localStream;
-    // Intentar reservar la trasera en paralelo (exclusividad)
-    void lockSecondaryCamera();
-    return localStream;
+    // Videollamada: frontal por defecto. Si niega cámara → sigue solo audio.
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({
+        audio: audioConstraints,
+        video: videoConstraints('user', qualityLevel),
+      });
+      facingMode = 'user';
+      localStream.getVideoTracks().forEach((t) => {
+        t.enabled = true;
+        try { t.contentHint = 'motion'; } catch (_) {}
+      });
+      localVideo.srcObject = localStream;
+      localVideo.classList.remove('rear');
+      camOn = true;
+      postNative({ type: 'camera-ready', facing: 'user' });
+      return localStream;
+    } catch (camErr) {
+      // Cámara denegada o ausente: no abortar — audio manda.
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
+          video: false,
+        });
+      } catch (micErr) {
+        throw micErr;
+      }
+      wantVideo = false;
+      camOn = false;
+      setVideoUiMode();
+      localVideo.srcObject = null;
+      setStatus('Sin cámara · llamada solo con audio cifrado');
+      postNative({ type: 'camera-denied-audio-only', message: String(camErr && camErr.message || camErr) });
+      return localStream;
+    }
   }
 
   async function flushPendingIce(conn) {
@@ -264,10 +400,8 @@
     pc.onicecandidate = (ev) => {
       if (!ev.candidate) return;
       const parsed = ipFromCandidate(ev.candidate);
-      // With relay policy, local candidates should be typ relay only.
       if (parsed && parsed.typ !== 'relay') {
         postNative({ type: 'ice-leak', side: 'local', ip: parsed.ip, typ: parsed.typ });
-        // Still do not send host/srflx when policy is relay (browser shouldn't emit them).
         if (iceTransportPolicy === 'relay') return;
       }
       sendSignal({ kind: 'ice', candidate: ev.candidate });
@@ -275,7 +409,7 @@
     pc.ontrack = (ev) => {
       remoteVideo.srcObject = ev.streams[0] || new MediaStream([ev.track]);
       try { remoteVideo.play(); } catch (_) {}
-      if (video) avatar.classList.remove('show');
+      if (wantVideo && ev.track.kind === 'video') avatar.classList.remove('show');
       setStatus(iceTransportPolicy === 'relay' ? 'Conectado · relé' : 'Conectado');
       iceRestartCount = 0;
       postNative({ type: 'connected', policy: iceTransportPolicy });
@@ -331,8 +465,9 @@
         setStatus(iceTransportPolicy === 'relay' ? 'Conectado · relé' : 'Conectado');
         postNative({ type: 'connected', policy: iceTransportPolicy });
         void logSelectedPair();
+        startAdaptLoop();
       } else if (s === 'connecting') {
-        setStatus('Conectando audio…');
+        setStatus(wantVideo ? 'Conectando audio/video…' : 'Conectando audio…');
       } else if (s === 'failed') {
         setStatus('Enlace falló. Reintentando…');
       }
@@ -418,115 +553,55 @@
       return;
     }
 
-    if (signal.kind === 'caption') {
-      showCaption(signal.from || 'Ellos', signal.text || '', signal.translated || '');
-      return;
-    }
-
-    const conn = await ensurePc();
-    if (signal.kind === 'sdp') {
-      const offerCollision =
-        signal.sdp.type === 'offer' &&
-        (makingOffer || conn.signalingState !== 'stable');
-      ignoreOffer = !polite && offerCollision;
-      if (ignoreOffer) return;
-      await conn.setRemoteDescription(signal.sdp);
-      await flushPendingIce(conn);
-      if (signal.sdp.type === 'offer') {
-        await conn.setLocalDescription(await conn.createAnswer());
-        sendSignal({ kind: 'sdp', sdp: assertEncryptedSdp(conn.localDescription) });
-        setStatus('Conectando…');
-      }
-      return;
-    }
-    if (signal.kind === 'ice' && signal.candidate) {
-      const parsed = ipFromCandidate(signal.candidate);
-      if (parsed) {
-        seenRemoteIps.push(parsed);
-        postNative({ type: 'ice-remote', ip: parsed.ip, typ: parsed.typ });
-      }
+    if (signal.kind === 'ice') {
+      const conn = await ensurePc();
+      if (!signal.candidate) return;
       if (!conn.remoteDescription) {
         pendingIce.push(signal.candidate);
         return;
       }
-      try {
-        await conn.addIceCandidate(signal.candidate);
-      } catch (e) {
-        if (!ignoreOffer) console.warn(e);
-      }
+      try { await conn.addIceCandidate(signal.candidate); } catch (_) {}
+      return;
     }
-  }
 
-  function showCaption(who, original, translated) {
-    captionsEl.classList.add('show');
-    capWho.textContent = who;
-    capText.textContent = translated && translated !== original
-      ? translated
-      : original;
-  }
-
-  async function translateCaption(text) {
-    try {
-      const resp = await fetch(apiBase + '/users/me/translate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer ' + token,
-        },
-        body: JSON.stringify({ text, targetLang: preferLang }),
-      });
-      if (!resp.ok) return text;
-      const data = await resp.json();
-      return data.text || text;
-    } catch (_) {
-      return text;
+    if (signal.kind === 'sdp' && signal.sdp) {
+      const conn = await ensurePc();
+      const desc = signal.sdp;
+      const offerCollision =
+        desc.type === 'offer' && (makingOffer || conn.signalingState !== 'stable');
+      ignoreOffer = !polite && offerCollision;
+      if (ignoreOffer) return;
+      await conn.setRemoteDescription(assertEncryptedSdp(desc));
+      await flushPendingIce(conn);
+      if (desc.type === 'offer') {
+        await conn.setLocalDescription(await conn.createAnswer());
+        sendSignal({ kind: 'sdp', sdp: assertEncryptedSdp(conn.localDescription) });
+      }
     }
   }
 
   function startCaptions() {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) {
-      setStatus('Subtítulos no disponibles en este dispositivo');
+      setStatus('Subtítulos no disponibles en este WebView');
       captionsOn = false;
       ccBtn.classList.remove('on');
+      captionsEl.classList.remove('show');
       return;
     }
     recognition = new SR();
+    recognition.lang = preferLang === 'en' ? 'en-US' : 'es-ES';
     recognition.continuous = true;
     recognition.interimResults = true;
-    recognition.lang = preferLang === 'en' ? 'en-US' : preferLang === 'pt' ? 'pt-BR' : 'es-ES';
-    let lastFinal = '';
-    recognition.onresult = async (ev) => {
-      let interim = '';
-      let finalText = '';
+    recognition.onresult = (ev) => {
+      let text = '';
       for (let i = ev.resultIndex; i < ev.results.length; i++) {
-        const t = ev.results[i][0].transcript;
-        if (ev.results[i].isFinal) finalText += t;
-        else interim += t;
+        text += ev.results[i][0].transcript;
       }
-      const shown = (finalText || interim).trim();
-      if (!shown) return;
-      showCaption('Tú', shown, '');
-      if (finalText && finalText !== lastFinal) {
-        lastFinal = finalText;
-        const translated = await translateCaption(finalText.trim());
-        sendSignal({
-          kind: 'caption',
-          from: displayName,
-          text: finalText.trim(),
-          translated,
-        });
-        showCaption('Tú', finalText.trim(), translated);
-      }
+      capWho.textContent = 'Tú';
+      capText.textContent = text;
     };
-    recognition.onerror = () => {
-      // Auto-restart after brief pause (common on mobile WebViews)
-      if (captionsOn) {
-        setTimeout(() => {
-          try { if (recognition) recognition.start(); } catch (_) {}
-        }, 600);
-      }
-    };
+    recognition.onerror = () => {};
     recognition.onend = () => {
       if (captionsOn) {
         try { recognition.start(); } catch (_) {}
@@ -548,7 +623,12 @@
     if (hungUp) return;
     hungUp = true;
     stopCaptions();
+    if (adaptTimer) clearInterval(adaptTimer);
     if (wsRetryTimer) clearTimeout(wsRetryTimer);
+    try {
+      if (wakeLock) wakeLock.release();
+    } catch (_) {}
+    wakeLock = null;
     try {
       if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: 'call_end', chatId }));
     } catch (_) {}
@@ -556,9 +636,49 @@
     if (pc) { try { pc.close(); } catch (_) {} pc = null; }
     stopStream(localStream);
     localStream = null;
-    stopStream(reservedCamStream);
-    reservedCamStream = null;
     postNative({ type: 'hangup' });
+  }
+
+  async function flipCamera() {
+    if (!wantVideo || !localStream || !pc) return;
+    const next = facingMode === 'user' ? 'environment' : 'user';
+    setStatus(next === 'user' ? 'Cambiando a frontal…' : 'Cambiando a trasera…');
+    try {
+      const fresh = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: videoConstraints(next, Math.min(qualityLevel, 3)),
+      });
+      const newTrack = fresh.getVideoTracks()[0];
+      if (!newTrack) throw new Error('Sin cámara ' + next);
+      newTrack.enabled = camOn;
+      try { newTrack.contentHint = 'motion'; } catch (_) {}
+
+      const sender = pc.getSenders().find((s) => s.track && s.track.kind === 'video');
+      const old = localStream.getVideoTracks()[0];
+      if (sender) {
+        await sender.replaceTrack(newTrack);
+      }
+      if (old) {
+        try { localStream.removeTrack(old); old.stop(); } catch (_) {}
+      }
+      localStream.addTrack(newTrack);
+      // Stop extra tracks from the temporary stream (none expected).
+      fresh.getTracks().forEach((t) => {
+        if (t !== newTrack) try { t.stop(); } catch (_) {}
+      });
+
+      facingMode = next;
+      localVideo.srcObject = localStream;
+      if (facingMode === 'user') localVideo.classList.remove('rear');
+      else localVideo.classList.add('rear');
+      if (!camOn) localVideo.classList.add('cam-off');
+      else localVideo.classList.remove('cam-off');
+      setStatus(iceTransportPolicy === 'relay' ? 'Conectado · relé' : 'Conectado');
+      postNative({ type: 'camera-flip', facing: facingMode });
+    } catch (e) {
+      setStatus('No se pudo cambiar de cámara');
+      postNative({ type: 'error', message: 'flip-failed: ' + (e && e.message || e) });
+    }
   }
 
   muteMicBtn.onclick = () => {
@@ -568,12 +688,15 @@
     muteMicBtn.textContent = micOn ? '🎤' : '🔇';
   };
   muteCamBtn.onclick = () => {
-    if (!video) return;
+    if (!wantVideo) return;
     camOn = !camOn;
-    // enabled=false (no stop): mantiene el bloqueo exclusivo de la cámara
     if (localStream) localStream.getVideoTracks().forEach((t) => { t.enabled = camOn; });
     muteCamBtn.classList.toggle('off', !camOn);
+    if (camOn) localVideo.classList.remove('cam-off');
+    else localVideo.classList.add('cam-off');
+    postNative({ type: 'cam-muted', muted: !camOn });
   };
+  flipCamBtn.onclick = () => { void flipCamera(); };
   ccBtn.onclick = () => {
     captionsOn = !captionsOn;
     ccBtn.classList.toggle('on', captionsOn);
@@ -594,18 +717,21 @@
     ws = new WebSocket(url);
     ws.onopen = async () => {
       wsRetry = 0;
-      setStatus(video ? 'Permisos de micrófono/cámara…' : 'Permisos de micrófono…');
+      void holdWakeLock();
+      setStatus(wantVideo ? 'Permisos de micrófono y cámara…' : 'Permisos de micrófono…');
       try {
         await ensureMedia();
         setStatus(role === 'caller' ? 'Esperando al otro…' : 'Entrando…');
         sendSignal({ kind: 'ready' });
         setTimeout(() => sendSignal({ kind: 'ready' }), 800);
         setTimeout(() => sendSignal({ kind: 'ready' }), 2000);
-        postNative({ type: 'media-ok' });
+        postNative({ type: 'media-ok', video: wantVideo });
       } catch (e) {
         const msg = (e && e.message) ? e.message : String(e);
         setStatus(
-          (video ? 'Activa micrófono y cámara para Synapmsg\n' : 'Activa el micrófono para Synapmsg\n') + msg
+          (wantVideo
+            ? 'Necesitamos el micrófono (y la cámara si aceptas).\n'
+            : 'Activa el micrófono para Synapmsg\n') + msg
         );
         postNative({ type: 'error', message: msg });
       }
@@ -632,9 +758,7 @@
       setStatus('Reconectando señal… (' + wsRetry + ')');
       wsRetryTimer = setTimeout(connectWs, delay);
     };
-    ws.onerror = () => {
-      /* onclose will retry */
-    };
+    ws.onerror = () => {};
   }
 
   if (!token || !chatId) {

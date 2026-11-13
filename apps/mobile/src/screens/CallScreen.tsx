@@ -21,6 +21,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, spacing } from '../theme/spacing';
 import { RootStackParamList } from '../types';
@@ -34,36 +35,41 @@ import { startRingtone, stopRingtone } from '../calls/ringtone';
 /** PIEZA 1: always P2P WebRTC — never route Private call media through an SFU. */
 const MEDIA_ENGINE = 'webrtc' as const;
 
-async function ensureCallPermissions(wantVideo: boolean): Promise<boolean> {
+type CallPerm = 'ok' | 'audio-only' | 'denied';
+
+/** Mic required. Camera optional for video: deny → continue audio-only. */
+async function ensureCallPermissions(wantVideo: boolean): Promise<CallPerm> {
   try {
     if (Platform.OS === 'android') {
-      if (!wantVideo) {
-        const mic = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-          {
-            title: 'Micrófono para la llamada',
-            message:
-              'Synap necesita el micrófono para la llamada de voz cifrada. El audio no pasa por el servidor en claro.',
-            buttonPositive: 'Permitir',
-            buttonNegative: 'Cancelar',
-          },
-        );
-        return mic === PermissionsAndroid.RESULTS.GRANTED;
-      }
-      const res = await PermissionsAndroid.requestMultiple([
+      const mic = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
-        PermissionsAndroid.PERMISSIONS.CAMERA,
-      ]);
-      return (
-        res[PermissionsAndroid.PERMISSIONS.RECORD_AUDIO] === 'granted' &&
-        res[PermissionsAndroid.PERMISSIONS.CAMERA] === 'granted'
+        {
+          title: 'Micrófono para la llamada',
+          message:
+            'Synap necesita el micrófono para la llamada cifrada. El audio no pasa por el servidor en claro.',
+          buttonPositive: 'Permitir',
+          buttonNegative: 'Ahora no',
+        },
       );
+      if (mic !== PermissionsAndroid.RESULTS.GRANTED) return 'denied';
+      if (!wantVideo) return 'ok';
+      const cam = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.CAMERA,
+        {
+          title: 'Cámara para la videollamada',
+          message:
+            'Synap usa la cámara solo mientras dura la videollamada. Si dices que no, la llamada sigue solo con audio cifrado.',
+          buttonPositive: 'Permitir cámara',
+          buttonNegative: 'Solo audio',
+        },
+      );
+      return cam === PermissionsAndroid.RESULTS.GRANTED ? 'ok' : 'audio-only';
     }
     const audio = await Audio.requestPermissionsAsync();
-    if (!audio.granted) return false;
-    return true;
+    if (!audio.granted) return 'denied';
+    return 'ok';
   } catch {
-    return false;
+    return 'denied';
   }
 }
 
@@ -84,10 +90,12 @@ export function CallScreen(): JSX.Element {
   const [webLoading, setWebLoading] = useState(true);
   const [statusHint, setStatusHint] = useState('Preparando…');
   const [callRoom, setCallRoom] = useState(roomParam || '');
+  /** If user denies camera, keep the call but force video=0 in WebRTC. */
+  const [forceAudioOnly, setForceAudioOnly] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ringTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const isVideo = callType === 'video';
+  const isVideo = callType === 'video' && !forceAudioOnly;
 
   const callUrl = useMemo(() => {
     if (!callRoom) return '';
@@ -146,22 +154,36 @@ export function CallScreen(): JSX.Element {
     };
   }, [phase]);
 
+  // Keep screen awake during the call (video and voice).
+  useEffect(() => {
+    if (phase !== 'in_call' && phase !== 'ringing') return;
+    void activateKeepAwakeAsync('synap-call');
+    return () => {
+      deactivateKeepAwake('synap-call');
+    };
+  }, [phase]);
+
   // Permisos → invitar / sonar
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setStatusHint('Pidiendo micrófono' + (isVideo ? '/cámara' : '') + '…');
-      const ok = await ensureCallPermissions(isVideo);
+      const wantCam = callType === 'video';
+      setStatusHint('Pidiendo micrófono' + (wantCam ? '/cámara' : '') + '…');
+      const perm = await ensureCallPermissions(wantCam);
       if (cancelled) return;
-      if (!ok) {
+      if (perm === 'denied') {
         Alert.alert(
           'Permiso necesario',
-          isVideo
-            ? 'Para la videollamada Synap necesita micrófono y cámara. El audio/video van cifrados entre los teléfonos; el servidor no los oye.'
+          wantCam
+            ? 'Para llamar, Synap necesita al menos el micrófono. La cámara es opcional: sin ella la llamada sigue solo con audio cifrado.'
             : 'Para la llamada de voz Synap necesita el micrófono. El audio va cifrado entre los teléfonos; el servidor no lo oye.',
           [{ text: 'OK', onPress: () => navigation.goBack() }],
         );
         return;
+      }
+      if (perm === 'audio-only') {
+        setForceAudioOnly(true);
+        setStatusHint('Sin cámara · continuarás solo con audio cifrado');
       }
 
       setStatusHint('Conectando con Synap…');
@@ -231,7 +253,6 @@ export function CallScreen(): JSX.Element {
     contactName,
     hangUp,
     incoming,
-    isVideo,
     me?.name,
     navigation,
     token,
@@ -398,12 +419,33 @@ export function CallScreen(): JSX.Element {
                 if (data.type === 'camera-blocked') {
                   setStatusHint('Llamada de voz · cámara bloqueada');
                 }
-                if (data.type === 'camera-locked') {
-                  setStatusHint(
-                    data.both
-                      ? 'Cámaras bloqueadas (exclusivo)'
-                      : 'Cámara en uso exclusivo',
+                if (data.type === 'camera-denied-audio-only') {
+                  setStatusHint('Sin cámara · solo audio cifrado');
+                }
+                if (data.type === 'camera-flip') {
+                  const facing = String(
+                    (data as { facing?: string }).facing || '',
                   );
+                  setStatusHint(
+                    facing === 'environment'
+                      ? 'Cámara trasera'
+                      : 'Cámara frontal',
+                  );
+                }
+                if (data.type === 'cam-muted') {
+                  setStatusHint(
+                    (data as { muted?: boolean }).muted
+                      ? 'Tu video apagado · te siguen oyendo'
+                      : 'Tu video encendido',
+                  );
+                }
+                if (data.type === 'video-quality') {
+                  const lvl = Number((data as { level?: number }).level);
+                  if (lvl >= 4) {
+                    setStatusHint('Red lenta · video pausado (audio intacto)');
+                  } else if (lvl > 0) {
+                    setStatusHint(`Red lenta · calidad video ${lvl}`);
+                  }
                 }
                 if (data.type === 'error' && data.message) {
                   setStatusHint(data.message);
