@@ -17,7 +17,11 @@ const DEMOSTRADO = [
   },
   {
     title: "Cuenta sin SIM",
-    body: "Al instalar se te asigna un número de 10 dígitos. Sin correo y sin SIM. El correo es opcional para recuperar.",
+    body: "Al instalar se te asigna un número de 10 dígitos. Sin correo y sin SIM.",
+  },
+  {
+    title: "Recuperación con código",
+    body: "Al crear la cuenta ves un código de 12 caracteres una sola vez (apúntalo en papel). Si perdés el teléfono, recuperás cuenta y número en synapmsg.ai/recuperar. Las conversaciones anteriores no se recuperan.",
   },
   {
     title: "Llamadas de voz y video (1 a 1)",
