@@ -58,10 +58,27 @@ async function proxyToApi(
   const targetUrl = `${origin}${tunnelPath}${incoming.search}`;
 
   // WebSocket upgrade — Cloudflare Workers can proxy WS.
+  // Strip client IP headers so Railway sees the Worker hop, not the phone.
   if (request.headers.get('Upgrade')?.toLowerCase() === 'websocket') {
+    const wsHeaders = new Headers();
+    request.headers.forEach((value, key) => {
+      const k = key.toLowerCase();
+      if (
+        k === 'cf-connecting-ip' ||
+        k === 'cf-ipcountry' ||
+        k === 'cf-ray' ||
+        k === 'cf-visitor' ||
+        k === 'x-forwarded-for' ||
+        k === 'x-forwarded-proto' ||
+        k === 'x-real-ip'
+      ) {
+        return;
+      }
+      wsHeaders.set(key, value);
+    });
     const wsReq = new Request(targetUrl, {
       method: 'GET',
-      headers: request.headers,
+      headers: wsHeaders,
     });
     const upstream = await fetch(wsReq);
     return upstream;

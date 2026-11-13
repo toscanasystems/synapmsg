@@ -407,7 +407,7 @@ export default function App(): JSX.Element {
         } catch {
           /* non-fatal — user can retry from Settings → Dispositivo E2E */
         } finally {
-          // Force WS onto direct API (calls break if stuck on tunnel Worker).
+          // Messaging WS uses Cloudflare tunnel (buildWsUrl); call WebView stays direct.
           wsManager.reconnect(token);
           void flushPendingSignalDecrypts();
         }

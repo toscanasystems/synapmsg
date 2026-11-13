@@ -26,7 +26,7 @@ import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, spacing } from '../theme/spacing';
 import { RootStackParamList } from '../types';
 import { useAuthStore } from '../store/auth';
-import { API_BASE_URL } from '../api/client';
+import { DIRECT_API_BASE_URL } from '../api/client';
 import wsManager from '../api/websocket';
 import { callsApi } from '../api/calls';
 import { UserAvatar } from '../components/UserAvatar';
@@ -108,7 +108,9 @@ export function CallScreen(): JSX.Element {
 
   const callUrl = useMemo(() => {
     if (!callRoom) return '';
-    const ws = API_BASE_URL.replace(/^http/, 'ws') + '/ws';
+    // Calls keep the direct API path (not the message tunnel).
+    const callApi = DIRECT_API_BASE_URL;
+    const ws = callApi.replace(/^http/, 'ws') + '/ws';
     const q = new URLSearchParams({
       token: token || '',
       chatId,
@@ -117,13 +119,13 @@ export function CallScreen(): JSX.Element {
       userId: me?.id || '',
       role: incoming ? 'callee' : 'caller',
       lang: me?.preferredLanguage || 'es',
-      api: API_BASE_URL,
+      api: callApi,
       ws,
       engine: MEDIA_ENGINE,
       room: callRoom,
     });
     if (isGroup) q.set('group', '1');
-    return `${API_BASE_URL}/call?${q.toString()}`;
+    return `${callApi}/call?${q.toString()}`;
   }, [
     token,
     chatId,

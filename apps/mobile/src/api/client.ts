@@ -17,16 +17,21 @@ export const DIRECT_API_BASE_URL = 'https://api.synapmsg.ai';
 /** Cloudflare Worker reverse-proxy — ISP sees media CDN, not Railway. */
 export const TUNNEL_API_BASE_URL = 'https://media.synapmsg.ai/tunnel';
 
-/** Mutable base URL (direct or tunnel). */
-export let API_BASE_URL: string = DIRECT_API_BASE_URL;
+/**
+ * Mutable base URL for messaging HTTP.
+ * Default = tunnel so Railway does not see the phone IP on send/receive.
+ * Call WebView stays on DIRECT_API_BASE_URL (see CallScreen).
+ */
+export let API_BASE_URL: string = TUNNEL_API_BASE_URL;
 
 export function isTunnelActive(): boolean {
   return API_BASE_URL.startsWith(TUNNEL_API_BASE_URL);
 }
 
 /**
- * Switch HTTP+WS base between direct API and media tunnel.
+ * Switch messaging HTTP base between direct API and media tunnel.
  * Call after VPN preference changes; reconnect WS separately.
+ * Prefer tunnel on — message IP privacy depends on it.
  */
 export function setApiBaseUrl(useTunnel: boolean): void {
   API_BASE_URL = useTunnel ? TUNNEL_API_BASE_URL : DIRECT_API_BASE_URL;
@@ -34,12 +39,12 @@ export function setApiBaseUrl(useTunnel: boolean): void {
 }
 
 /**
- * WebSocket URL — always hits the direct API.
- * HTTP may use the Cloudflare tunnel for anti-censorship, but WS through
- * the Worker is unreliable (calls look like "peer offline" with Synap open).
+ * Messaging WebSocket — always via Cloudflare tunnel.
+ * Strips phone IP before the hop to Railway. Call media/signaling WebView
+ * keeps using DIRECT_API_BASE_URL in CallScreen (unchanged call path).
  */
 export function buildWsUrl(token: string): string {
-  const base = DIRECT_API_BASE_URL.replace(/^http/, 'ws');
+  const base = TUNNEL_API_BASE_URL.replace(/^http/, 'ws');
   const sep = base.endsWith('/') ? '' : '/';
   return `${base}${sep}ws?token=${encodeURIComponent(token)}`;
 }

@@ -21,19 +21,24 @@ Pasos exactos en el panel (lo que tiene que tocar el usuario):
 5. Enviar un correo de prueba a `soporte@synapmsg.ai` desde otra cuenta y confirmar llegada (y spam).
 6. Cuando llegue: borrar este aviso de HECHO y recién entonces anunciar el correo en marketing.
 
+## 2026-11-13 — Mensajes por túnel Cloudflare (PASO 2 IP)
+
+Los mensajes pasan por el túnel de Cloudflare: el servidor ya no ve la dirección IP
+del remitente. Probado con un mensaje leído entre dos teléfonos, y las llamadas
+siguen funcionando.
+
+Comprobado: POST `/chats/.../messages` en Railway HTTP logs con `srcIp=162.158.82.152`
+(edge Cloudflare, no la IP del teléfono). Privado E2E Toscana 89-5399-8750 → Samsung
+53-2991-0588 (APK v83; el Samsung perdió el 29-6112-5793 al reinstalar). Llamadas
+voz/video siguen por `DIRECT_API_BASE_URL` en CallScreen; ring UI intacta.
+
 ## 2026-11-12 — Metadata de mensajes e IP del remitente
 
 El servidor no guarda la IP en la fila del mensaje ni en los registros de la propia API.
-Pero sí queda en dos sitios: (1) los registros HTTP de Railway anotan la IP del cliente
-en cada petición y no se pueden apagar; se borran a los 90 días en todos los planes.
-(2) cuando alguien pasa el límite de intentos, la IP se escribe una vez en el log
-de la API. La base de datos no tiene ninguna columna con la IP del cliente.
-
-Queda pendiente: Railway ve la IP en la conexión al enviar, porque el WebSocket de
-mensajes no pasa por el túnel de Cloudflare. Eso es trabajo posterior.
-
-El log del límite de intentos ya no escribe la IP. El registro HTTP de Railway no se
-puede apagar: anota la IP de cada petición y se borra a los 90 días.
+Los registros HTTP de Railway anotan la IP que ven en cada petición (ahora la del
+edge Cloudflare cuando el cliente usa el túnel) y se borran a los 90 días.
+La base de datos no tiene ninguna columna con la IP del cliente.
+El log del límite de intentos ya no escribe la IP.
 
 ## 2026-11-12 — Cierre de sesión (APK liviano, HEAD, landing)
 

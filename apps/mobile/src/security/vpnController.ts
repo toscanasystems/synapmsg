@@ -58,20 +58,22 @@ export async function setVpnPreferred(on: boolean): Promise<void> {
   await AsyncStorage.setItem(VPN_ENABLED_KEY, on ? '1' : '0');
 }
 
-/** Apply tunnel routing + reconnect WebSocket if logged in. */
-export async function applyTrafficTunnel(on: boolean): Promise<void> {
-  setApiBaseUrl(on);
+/**
+ * Apply Cloudflare tunnel for messaging HTTP + reconnect WS.
+ * Message IP privacy requires the tunnel; keep it on even if WireGuard is off.
+ */
+export async function applyTrafficTunnel(_on: boolean): Promise<void> {
+  setApiBaseUrl(true);
   const token = getAuthToken();
   if (token) {
     wsManager.reconnect(token);
   }
 }
 
-/** Hydrate tunnel preference at app start (before first API calls ideally). */
+/** Hydrate routing at app start — messaging always via media.synapmsg.ai/tunnel. */
 export async function hydrateVpnRouting(): Promise<boolean> {
-  const on = await isVpnPreferred();
-  setApiBaseUrl(on);
-  return on;
+  setApiBaseUrl(true);
+  return true;
 }
 
 /** Open WireGuard import or Outline add-server deep link when possible. */
