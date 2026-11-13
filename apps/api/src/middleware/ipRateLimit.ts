@@ -1,7 +1,9 @@
 /**
  * Sliding-window IP rate limit (in-memory). Resets when the window rolls forward.
+ * On trip: log a short hash of the IP only — never the full address.
  */
 
+import { createHash } from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 
 type Bucket = { hits: number[] };
@@ -26,6 +28,11 @@ function clientIp(req: Request): string {
   return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
+/** Short fingerprint for debug logs — not reversible to the IP. */
+function shortIpHash(ip: string): string {
+  return createHash('sha256').update(ip).digest('hex').slice(0, 8);
+}
+
 export function ipRateLimit(opts: IpRateLimitOptions) {
   const windowMs = opts.windowMs ?? 60_000;
   const max = opts.max;
@@ -43,7 +50,7 @@ export function ipRateLimit(opts: IpRateLimitOptions) {
     if (bucket.hits.length >= max) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[rate-limit] ip=${ip} path=${req.originalUrl || req.path} name=${opts.name}`,
+        `[rate-limit] ipHash=${shortIpHash(ip)} path=${req.originalUrl || req.path} name=${opts.name}`,
       );
       res.status(429).json({
         error: 'Too many attempts. Wait a minute and try again.',
