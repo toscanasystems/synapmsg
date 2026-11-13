@@ -23,10 +23,17 @@ Pasos exactos en el panel (lo que tiene que tocar el usuario):
 
 ## 2026-11-12 — Metadata de mensajes e IP del remitente
 
-El servidor no guarda la IP del remitente en la fila del mensaje ni en los registros.
-La IP se usa solo en memoria para contar intentos de entrada.
+El servidor no guarda la IP en la fila del mensaje ni en los registros de la propia API.
+Pero sí queda en dos sitios: (1) los registros HTTP de Railway anotan la IP del cliente
+en cada petición y no se pueden apagar; se borran a los 90 días en todos los planes.
+(2) cuando alguien pasa el límite de intentos, la IP se escribe una vez en el log
+de la API. La base de datos no tiene ninguna columna con la IP del cliente.
+
 Queda pendiente: Railway ve la IP en la conexión al enviar, porque el WebSocket de
 mensajes no pasa por el túnel de Cloudflare. Eso es trabajo posterior.
+
+El log del límite de intentos ya no escribe la IP. El registro HTTP de Railway no se
+puede apagar: anota la IP de cada petición y se borra a los 90 días.
 
 ## 2026-11-12 — Cierre de sesión (APK liviano, HEAD, landing)
 
@@ -78,7 +85,7 @@ API `api.synapmsg.ai` + prueba local `127.0.0.1:3099` (Railway no respeta `X-For
 1. Login: 5 fallos → 401; el 6.º → **429** (`code: rate_limited`). Scripts `proof-rate-limit-login.js`.
 2. Registro/bootstrap: 5 altas → 201; el 6.º → **429**. Script `proof-rate-limit-register.js` en producción.
 3. Otra IP (local, cabecera `X-Forwarded-For` distinta): no hereda el límite; login con clave correcta responde 200 (`requiresWebAuthn` / ticket — la clave pasó el rate limit).
-4. El límite es ventana de 1 minuto por IP (no ban permanente). Log: `[rate-limit] ip=… path=… name=auth-login|auth-register`.
+4. El límite es ventana de 1 minuto por IP (no ban permanente). Log (tras 2026-11-13): `[rate-limit] ipHash=… path=… name=auth-login|auth-register` — sin IP completa.
 
 ### Todavía no
 
