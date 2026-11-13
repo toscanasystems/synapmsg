@@ -39,22 +39,15 @@ Comprobado en MeshP4 (Samsung `R5CYA03YERH` 94-****-4160, Toscana `RFCX41A9NQL` 
 
 ## 2026-11-13 — Correo de contacto público
 
-Un solo correo público en todo el producto: administrador@toscanasystems.com.
-No anunciar otras direcciones @synapmsg.ai hasta que Email Routing esté activo y probado.
+Un solo correo de contacto público: administrador@toscanasystems.com.
+No se creará `legal@synapmsg.ai`. Contacto legal/security/bounty: el mismo administrador@.
 
 Estado Cloudflare (wrangler, 2026-11-13 ~17:30 UTC-6):
 - Email Routing: `enabled=false`, `status=unconfigured`.
 - Destino `administrador@toscanasystems.com` aún no verificado en Cloudflare.
-- Un destino interno quedó **pending**; no usarlo como contacto público.
 - `wrangler email routing enable synapmsg.ai` falla: `Active zone required [code: 2009]`.
 - DNS público: NS Cloudflare; sin MX públicos todavía.
-
-Pasos del panel (cuando la zona esté Active):
-1. Dashboard → `synapmsg.ai` → Email → Email Routing → Get started / Enable.
-2. Dejar publicar MX/SPF/DKIM de Cloudflare.
-3. Destination addresses → verificar `administrador@toscanasystems.com`.
-4. Regla de ruteo interna (buzón del dominio → reenviar a administrador@). No publicar ese buzón en UI.
-5. Probar recepción; el contacto visible sigue siendo solo administrador@.
+- Pendiente solo: activar zona + verificar destino administrador@ (sin buzones de contacto nuevos en @synapmsg.ai).
 
 ## 2026-11-13 — Mensajes por túnel Cloudflare (PASO 2 IP)
 
