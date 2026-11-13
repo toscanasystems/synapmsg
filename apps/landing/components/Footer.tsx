@@ -31,10 +31,20 @@
               <span className="text-xl font-bold">Synap</span>
             </div>
             <p className="text-gray-400 text-sm max-w-sm leading-relaxed">
-              Un producto de Toscana Systems.
+              <a
+                href="https://www.toscanasystems.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-accent-light"
+              >
+                Un producto de Toscana Systems, S.A.
+              </a>
+            </p>
+            <p className="mt-2 text-gray-500 text-sm max-w-sm leading-relaxed">
+              Edificio Santa María, Apt 9D, Zona 10, Guatemala, 01010
             </p>
             <a
-              href="https://toscanasystems.com"
+              href="https://www.toscanasystems.com"
               target="_blank"
               rel="noopener noreferrer"
               className="mt-6 inline-flex items-center gap-3 rounded-xl border border-white/10 bg-white/5 px-3 py-2 hover:border-accent/40 transition-colors"

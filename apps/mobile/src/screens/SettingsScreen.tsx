@@ -1518,6 +1518,15 @@ export function SettingsScreen(): JSX.Element {
             onPress={() => Linking.openURL('https://synapmsg.ai/support')}
           />
           <SettingsRow
+            icon="mail"
+            iconBg="#30B0B0"
+            title="Correo de soporte"
+            subtitle="soporte@synapmsg.ai"
+            onPress={() =>
+              void Linking.openURL('mailto:soporte@synapmsg.ai')
+            }
+          />
+          <SettingsRow
             icon="share-2"
             iconBg="#007AFF"
             title="Invitar a un amigo"
