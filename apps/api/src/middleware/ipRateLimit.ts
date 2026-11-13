@@ -17,6 +17,11 @@ export type IpRateLimitOptions = {
   windowMs?: number;
   /** Label for logs / bucket key (e.g. auth-login). */
   name: string;
+  /**
+   * When over limit, Retry-After grows: 2^excess seconds (capped at window).
+   * Blocked attempts still increment the bucket so wait keeps growing.
+   */
+  growingWait?: boolean;
 };
 
 function clientIp(req: Request): string {
@@ -28,8 +33,8 @@ function clientIp(req: Request): string {
   return req.ip || req.socket.remoteAddress || 'unknown';
 }
 
-/** Short fingerprint for debug logs — not reversible to the IP. */
-function shortIpHash(ip: string): string {
+/** Short fingerprint for audit logs — not reversible to the IP. */
+export function shortIpHash(ip: string): string {
   return createHash('sha256').update(ip).digest('hex').slice(0, 8);
 }
 
@@ -48,13 +53,21 @@ export function ipRateLimit(opts: IpRateLimitOptions) {
     }
     bucket.hits = bucket.hits.filter((t) => now - t < windowMs);
     if (bucket.hits.length >= max) {
+      const excess = bucket.hits.length - max + 1;
+      const retryAfterSec = opts.growingWait
+        ? Math.min(Math.ceil(windowMs / 1000), Math.max(2, 2 ** excess))
+        : Math.ceil(windowMs / 1000);
+      // Count blocked hits so growing wait keeps climbing within the window.
+      if (opts.growingWait) bucket.hits.push(now);
       // eslint-disable-next-line no-console
       console.warn(
-        `[rate-limit] ipHash=${shortIpHash(ip)} path=${req.originalUrl || req.path} name=${opts.name}`,
+        `[rate-limit] ipHash=${shortIpHash(ip)} path=${req.originalUrl || req.path} name=${opts.name} retryAfter=${retryAfterSec}`,
       );
+      res.setHeader('Retry-After', String(retryAfterSec));
       res.status(429).json({
         error: 'Too many attempts. Wait a minute and try again.',
         code: 'rate_limited',
+        retryAfterSec,
       });
       return;
     }

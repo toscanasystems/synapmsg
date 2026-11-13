@@ -20,8 +20,10 @@ import {
 import {
   generateRecoveryCode,
   hashRecoveryCode,
+  isValidRecoveryCodeFormat,
+  verifyRecoveryCode,
 } from '../lib/accountRecovery';
-import { ipRateLimit } from '../middleware/ipRateLimit';
+import { ipRateLimit, shortIpHash } from '../middleware/ipRateLimit';
 
 const FIDO2_RP_ID = process.env.FIDO2_RP_ID || 'synapmsg.ai';
 const FIDO2_ORIGIN = process.env.FIDO2_ORIGIN || 'https://api.synapmsg.ai';
@@ -36,6 +38,25 @@ const registerIpLimit = ipRateLimit({
   max: 5,
   windowMs: 60_000,
 });
+/** Account recover: 5/min/IP + growing Retry-After. */
+const recoverIpLimit = ipRateLimit({
+  name: 'auth-recover',
+  max: 5,
+  windowMs: 60_000,
+  growingWait: true,
+});
+
+const RECOVER_GENERIC_ERROR =
+  'No se pudo recuperar con ese código. Revisá el papel e intentá de nuevo.';
+
+function clientIpForLog(req: Request): string {
+  const xf = req.headers['x-forwarded-for'];
+  if (typeof xf === 'string' && xf.trim()) {
+    return xf.split(',')[0]!.trim();
+  }
+  if (Array.isArray(xf) && xf[0]) return String(xf[0]).split(',')[0]!.trim();
+  return req.ip || req.socket.remoteAddress || 'unknown';
+}
 
 // ───────────────────────────────────────────────────────────
 // Validation helpers
@@ -616,6 +637,104 @@ router.post(
         data: { accountRecoveryConfirmed: true },
       });
       res.json({ user: serializeUser(user) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
+ * POST /auth/recover
+ * Body: { code } — 12-char recovery passphrase.
+ * Looks up by argon2 verify (hash only in DB). Always same error on miss.
+ * On success: same privateNumber, wipe server-side device keys, new loginTicket.
+ */
+router.post(
+  '/recover',
+  recoverIpLimit,
+  async (req: Request, res: Response, next: NextFunction) => {
+    const ipHash = shortIpHash(clientIpForLog(req));
+    try {
+      const raw = String((req.body ?? {}).code ?? '');
+      if (!isValidRecoveryCodeFormat(raw)) {
+        // eslint-disable-next-line no-console
+        console.info(`[account-recover] ipHash=${ipHash} result=fail reason=format`);
+        res.status(400).json({ error: RECOVER_GENERIC_ERROR });
+        return;
+      }
+
+      const candidates = await prisma.user.findMany({
+        where: { accountRecoveryHash: { not: null } },
+        select: {
+          id: true,
+          email: true,
+          username: true,
+          privateNumber: true,
+          accountRecoveryHash: true,
+        },
+      });
+
+      let matched: (typeof candidates)[number] | null = null;
+      for (const row of candidates) {
+        if (!row.accountRecoveryHash) continue;
+        if (await verifyRecoveryCode(raw, row.accountRecoveryHash)) {
+          matched = row;
+          break;
+        }
+      }
+
+      if (!matched) {
+        // eslint-disable-next-line no-console
+        console.info(`[account-recover] ipHash=${ipHash} result=fail reason=nomatch`);
+        res.status(400).json({ error: RECOVER_GENERIC_ERROR });
+        return;
+      }
+
+      // Invalidate lost-phone crypto material: Signal device pubs + trusted logins.
+      // Old phone keys must never decrypt new traffic after recover.
+      await prisma.$transaction([
+        prisma.deviceIdentity.deleteMany({ where: { userId: matched.id } }),
+        prisma.trustedLoginDevice.deleteMany({ where: { userId: matched.id } }),
+        prisma.user.update({
+          where: { id: matched.id },
+          data: {
+            pushToken: null,
+            // Rotate password so stale sessions/credentials on the lost phone stop working.
+            passwordHash: await bcrypt.hash(randomBytes(32).toString('hex'), 10),
+          },
+        }),
+      ]);
+
+      const fresh = await prisma.user.findUnique({ where: { id: matched.id } });
+      if (!fresh) {
+        res.status(400).json({ error: RECOVER_GENERIC_ERROR });
+        return;
+      }
+
+      const loginTicket = signLoginTicket(fresh.id);
+      const token = signToken({
+        id: fresh.id,
+        email: fresh.email,
+        username: fresh.username,
+      });
+
+      // eslint-disable-next-line no-console
+      console.info(
+        `[account-recover] ipHash=${ipHash} result=ok userId=${fresh.id.slice(0, 8)}`,
+      );
+
+      res.json({
+        ok: true,
+        privateNumber: fresh.privateNumber,
+        privateNumberFormatted: fresh.privateNumber
+          ? formatPrivateNumber(fresh.privateNumber)
+          : null,
+        loginTicket,
+        token,
+        user: serializeUser(fresh),
+        notice:
+          'Recuperaste tu cuenta y tu número. Tus conversaciones anteriores no se pueden recuperar.',
+      });
     } catch (err) {
       next(err);
     }
