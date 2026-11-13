@@ -48,7 +48,11 @@ const ROWS: Row[] = [
   },
   {
     feature: "Llamadas de voz y video",
-    Synap: "Sí, con la IP oculta",
+    Synap: "Voz y video, con la IP oculta tras el relé",
+  },
+  {
+    feature: "Llamada en grupo",
+    Synap: "Hasta 8, probada con 3 teléfonos",
   },
   {
     feature: "Canales y archivos de más de 25 MB",
@@ -159,9 +163,18 @@ const SIX_ROWS: SixRow[] = [
   },
   {
     feature: "Llamadas de voz y video",
-    synap: "Sí, con la IP oculta",
+    synap: "Voz y video, con la IP oculta tras el relé",
     session: "Sí, en beta",
     zangi: "Sí",
+    signal: "Hasta 30",
+    telegram: "Hasta 40",
+    whatsapp: "Hasta 32",
+  },
+  {
+    feature: "Llamada en grupo",
+    synap: "Hasta 8, probada con 3 teléfonos",
+    session: "Sí, en beta",
+    zangi: "Hasta 1.000 en conferencia",
     signal: "Hasta 30",
     telegram: "Hasta 40",
     whatsapp: "Hasta 32",

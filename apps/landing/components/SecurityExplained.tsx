@@ -25,14 +25,13 @@ const DEMOSTRADO = [
   },
   {
     title: "Llamadas de voz en grupo",
-    body: "Hasta 8 en malla (sin mezclador en el servidor). Salir no corta la llamada para los demás. Relé TURN igual que en 1 a 1. La prueba en vivo con tres teléfonos sigue pendiente.",
+    body: "Hasta 8 en malla (sin mezclador en el servidor). Salir no corta la llamada para los demás. Relé TURN igual que en 1 a 1. Probada con tres teléfonos reales.",
   },
 ];
 
 const TODAVIA_NO = [
   "Wipe remoto, PIN de coacción y llaves físicas como paquete cerrado.",
   "Más pares on-device que inglés↔español demostrados en dispositivo.",
-  "Prueba en vivo de llamada de grupo con tres teléfonos (matriz de 5).",
 ];
 export function SecurityExplained() {
   return (
