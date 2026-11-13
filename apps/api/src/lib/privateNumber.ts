@@ -30,16 +30,37 @@ export function randomPrivateNumberCandidate(): string {
 
 /**
  * Allocate a unique 10-digit Private Number on the server.
+ * Checks users + permanent ledger so numbers are never reused.
  * Max 5 attempts on collision (product rule).
  */
-export async function allocatePrivateNumber(): Promise<string> {
+export async function allocatePrivateNumber(firstUserId?: string): Promise<string> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const candidate = randomPrivateNumberCandidate();
-    const clash = await prisma.user.findFirst({
-      where: { privateNumber: candidate },
-      select: { id: true },
-    });
-    if (!clash) return candidate;
+    const [userClash, ledgerClash] = await Promise.all([
+      prisma.user.findFirst({
+        where: { privateNumber: candidate },
+        select: { id: true },
+      }),
+      prisma.privateNumberLedger.findUnique({
+        where: { privateNumber: candidate },
+        select: { privateNumber: true },
+      }),
+    ]);
+    if (userClash || ledgerClash) continue;
+    try {
+      await prisma.privateNumberLedger.create({
+        data: {
+          privateNumber: candidate,
+          firstUserId: firstUserId ?? null,
+        },
+      });
+      return candidate;
+    } catch (err) {
+      // Unique race on ledger — try another candidate.
+      const code = (err as { code?: string }).code;
+      if (code === 'P2002') continue;
+      throw err;
+    }
   }
   throw new Error('Could not allocate private number after 5 attempts');
 }
@@ -51,10 +72,15 @@ export async function ensurePrivateNumber(userId: string): Promise<string> {
     select: { privateNumber: true },
   });
   if (user?.privateNumber) return user.privateNumber;
-  const privateNumber = await allocatePrivateNumber();
+  const privateNumber = await allocatePrivateNumber(userId);
   await prisma.user.update({
     where: { id: userId },
     data: { privateNumber },
+  });
+  // Bind ledger firstUserId if we reserved without it.
+  await prisma.privateNumberLedger.updateMany({
+    where: { privateNumber, firstUserId: null },
+    data: { firstUserId: userId },
   });
   return privateNumber;
 }

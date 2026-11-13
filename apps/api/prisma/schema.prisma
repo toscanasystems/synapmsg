@@ -40,7 +40,12 @@ model User {
   translationsDayKey   String              @default("")
   lastActiveAt         DateTime?
   fido2Enforced        Boolean             @default(false)
-  recoveryCodesHash    String?             // JSON array of argon2 hashes
+  recoveryCodesHash    String?             // JSON array of argon2 hashes (FIDO2 one-time codes)
+  /// Account recovery passphrase (12-char): argon2 hash only — never plaintext.
+  accountRecoveryHash       String?
+  accountRecoveryCreatedAt  DateTime?
+  /// User confirmed they wrote the code down (shown once at signup).
+  accountRecoveryConfirmed  Boolean             @default(false)
   decoyUserId          String?             @db.Uuid
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
@@ -61,6 +66,16 @@ model User {
   @@index([privateNumber])
   @@index([lastActiveAt])
   @@map("users")
+}
+
+/// Permanent ledger of Private Numbers — never reassigned, even after account delete.
+model PrivateNumberLedger {
+  privateNumber String   @id
+  /// User that first received this number (informational; may be deleted later).
+  firstUserId   String?  @db.Uuid
+  createdAt     DateTime @default(now())
+
+  @@map("private_number_ledger")
 }
 
 // ───────────────────────────────────────────────────────────
