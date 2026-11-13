@@ -708,14 +708,23 @@ export function SettingsScreen(): JSX.Element {
                   thumbColor="#fff"
                 />
               }
-              last={!user.email ? false : true}
+            />
+            <SettingsRow
+              icon="key"
+              iconBg="#C45C26"
+              title="Recuperar cuenta (web)"
+              subtitle="Si perdés el teléfono: synapmsg.ai/recuperar con tu código"
+              onPress={() =>
+                void Linking.openURL('https://synapmsg.ai/recuperar')
+              }
+              last={Boolean(user.email)}
             />
             {!user.email ? (
               <SettingsRow
                 icon="mail"
                 iconBg="#107090"
-                title="Agregar correo para recuperar"
-                subtitle="Opcional. Si perdés el teléfono sin correo, no hay recuperación."
+                title="Agregar correo (opcional)"
+                subtitle="Extra. La recuperación principal es el código de 12 caracteres."
                 onPress={() => {
                   setEmailDraft('');
                   setEmailModalOpen(true);
@@ -724,21 +733,33 @@ export function SettingsScreen(): JSX.Element {
               />
             ) : null}
           </View>
-        ) : !user.email ? (
+        ) : (
           <View style={styles.card}>
             <SettingsRow
-              icon="mail"
-              iconBg="#107090"
-              title="Agregar correo para recuperar"
-              subtitle="Opcional. Si perdés el teléfono sin correo, no hay recuperación."
-              onPress={() => {
-                setEmailDraft('');
-                setEmailModalOpen(true);
-              }}
-              last
+              icon="key"
+              iconBg="#C45C26"
+              title="Recuperar cuenta (web)"
+              subtitle="Si perdés el teléfono: synapmsg.ai/recuperar con tu código"
+              onPress={() =>
+                void Linking.openURL('https://synapmsg.ai/recuperar')
+              }
+              last={Boolean(user.email)}
             />
+            {!user.email ? (
+              <SettingsRow
+                icon="mail"
+                iconBg="#107090"
+                title="Agregar correo (opcional)"
+                subtitle="Extra. La recuperación principal es el código de 12 caracteres."
+                onPress={() => {
+                  setEmailDraft('');
+                  setEmailModalOpen(true);
+                }}
+                last
+              />
+            ) : null}
           </View>
-        ) : null}
+        )}
 
         {/* Plan */}
         <View style={styles.card}>

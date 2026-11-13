@@ -87,6 +87,11 @@
                 </a>
               </li>
               <li>
+                <a href="/recuperar/" className="hover:text-accent-light">
+                  Recuperar cuenta
+                </a>
+              </li>
+              <li>
                 <a href="/privacy/" className="hover:text-accent-light">
                   Privacidad
                 </a>
