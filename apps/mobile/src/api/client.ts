@@ -13,16 +13,24 @@ import axios, { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'ax
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { STORAGE_KEYS } from '../types';
 
-export const DIRECT_API_BASE_URL = 'https://api.synapmsg.ai';
+const ENV_API_URL = String(process.env.EXPO_PUBLIC_API_URL ?? '')
+  .trim()
+  .replace(/\/$/, '');
+
+export const DIRECT_API_BASE_URL =
+  ENV_API_URL || 'https://api.synapmsg.ai';
 /** Cloudflare Worker reverse-proxy — ISP sees media CDN, not Railway. */
 export const TUNNEL_API_BASE_URL = 'https://media.synapmsg.ai/tunnel';
 
 /**
  * Mutable base URL for messaging HTTP.
  * Default = tunnel so Railway does not see the phone IP on send/receive.
+ * Local/dev EXPO_PUBLIC_API_URL skips the tunnel (points straight at that host).
  * Call WebView stays on DIRECT_API_BASE_URL (see CallScreen).
  */
-export let API_BASE_URL: string = TUNNEL_API_BASE_URL;
+export let API_BASE_URL: string = ENV_API_URL
+  ? DIRECT_API_BASE_URL
+  : TUNNEL_API_BASE_URL;
 
 export function isTunnelActive(): boolean {
   return API_BASE_URL.startsWith(TUNNEL_API_BASE_URL);
@@ -34,7 +42,12 @@ export function isTunnelActive(): boolean {
  * Prefer tunnel on — message IP privacy depends on it.
  */
 export function setApiBaseUrl(useTunnel: boolean): void {
-  API_BASE_URL = useTunnel ? TUNNEL_API_BASE_URL : DIRECT_API_BASE_URL;
+  // Local/dev EXPO_PUBLIC_API_URL always wins — never force tunnel over it.
+  if (ENV_API_URL) {
+    API_BASE_URL = DIRECT_API_BASE_URL;
+  } else {
+    API_BASE_URL = useTunnel ? TUNNEL_API_BASE_URL : DIRECT_API_BASE_URL;
+  }
   apiClient.defaults.baseURL = API_BASE_URL;
 }
 
@@ -44,7 +57,8 @@ export function setApiBaseUrl(useTunnel: boolean): void {
  * keeps using DIRECT_API_BASE_URL in CallScreen (unchanged call path).
  */
 export function buildWsUrl(token: string): string {
-  const base = TUNNEL_API_BASE_URL.replace(/^http/, 'ws');
+  const httpBase = ENV_API_URL ? DIRECT_API_BASE_URL : TUNNEL_API_BASE_URL;
+  const base = httpBase.replace(/^http/, 'ws');
   const sep = base.endsWith('/') ? '' : '/';
   return `${base}${sep}ws?token=${encodeURIComponent(token)}`;
 }

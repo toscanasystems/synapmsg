@@ -15,7 +15,12 @@ import authApi from '../api/auth';
 import { mapAuthError } from '../api/authErrors';
 import { setAuthToken, setOnUnauthorized, API_BASE_URL } from '../api/client';
 import wsManager from '../api/websocket';
-import { User, LoginRequest, RegisterRequest } from '../types';
+import {
+  User,
+  LoginRequest,
+  RegisterRequest,
+  STORAGE_KEYS,
+} from '../types';
 import {
   clearAuthSession,
   getAuthSession,
@@ -31,6 +36,8 @@ interface AuthState {
   isLoading: boolean;
   isHydrated: boolean;
   error: string | null;
+  /** One-time recovery passphrase waiting for "Ya lo apunté". */
+  pendingRecoveryCode: string | null;
 
   // Actions
   hydrate: () => Promise<void>;
@@ -42,6 +49,7 @@ interface AuthState {
   logout: () => Promise<void>;
   clearError: () => void;
   setUser: (user: User) => void;
+  clearPendingRecoveryCode: () => Promise<void>;
 }
 
 // Register the 401 handler ONCE at module load time. Zustand store
@@ -55,6 +63,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: false,
   isHydrated: false,
   error: null,
+  pendingRecoveryCode: null,
 
   hydrate: async () => {
     // Auto-login OFF by default (release). Opt-in: EXPO_PUBLIC_AUTO_LOGIN=1.
@@ -84,11 +93,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     try {
       const { token, userJson } = await getAuthSession();
+      let pendingRecoveryCode: string | null = null;
+      try {
+        pendingRecoveryCode = await AsyncStorage.getItem(
+          STORAGE_KEYS.PENDING_RECOVERY_CODE,
+        );
+      } catch {
+        pendingRecoveryCode = null;
+      }
 
       if (token) {
         setAuthToken(token);
         const user = userJson ? (JSON.parse(userJson) as User) : null;
-        set({ token, user, isHydrated: true });
+        set({ token, user, isHydrated: true, pendingRecoveryCode });
 
         // Best-effort refresh of the user profile (token may be stale).
         try {
@@ -213,12 +230,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   register: async (payload) => {
     set({ isLoading: true, error: null });
     try {
-      const { token, user } = await authApi.register(payload);
+      const { token, user, recoveryCode } = await authApi.register(payload);
       // Persist + set auth state BEFORE opening the socket so the UI
       // can switch to the authenticated stack immediately.
       await setAuthSession(token, JSON.stringify(user));
       setAuthToken(token);
-      set({ token, user, isLoading: false, error: null });
+      if (recoveryCode) {
+        await AsyncStorage.setItem(
+          STORAGE_KEYS.PENDING_RECOVERY_CODE,
+          recoveryCode,
+        );
+      }
+      set({
+        token,
+        user,
+        isLoading: false,
+        error: null,
+        pendingRecoveryCode: recoveryCode ?? null,
+      });
       try {
         wsManager.connect(token);
       } catch {
@@ -234,9 +263,23 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   bootstrap: async (preferredLanguage = 'es') => {
     set({ isLoading: true, error: null });
     try {
-      const { token, user } = await authApi.bootstrap(preferredLanguage);
+      const { token, user, recoveryCode } = await authApi.bootstrap(
+        preferredLanguage,
+      );
       setAuthToken(token);
-      set({ token, user, isLoading: false, error: null });
+      if (recoveryCode) {
+        await AsyncStorage.setItem(
+          STORAGE_KEYS.PENDING_RECOVERY_CODE,
+          recoveryCode,
+        );
+      }
+      set({
+        token,
+        user,
+        isLoading: false,
+        error: null,
+        pendingRecoveryCode: recoveryCode ?? null,
+      });
       try {
         await setAuthSession(token, JSON.stringify(user));
       } catch {
@@ -252,6 +295,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ isLoading: false, error: message });
       throw err;
     }
+  },
+
+  clearPendingRecoveryCode: async () => {
+    await AsyncStorage.removeItem(STORAGE_KEYS.PENDING_RECOVERY_CODE);
+    set({ pendingRecoveryCode: null });
   },
 
   adoptSession: async (token, user) => {

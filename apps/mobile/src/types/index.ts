@@ -74,6 +74,10 @@ export interface User {
   translationsToday?: number;
   lastSeenAt?: string | null;
   online?: boolean;
+  /** User confirmed they wrote down the one-time recovery passphrase. */
+  accountRecoveryConfirmed?: boolean;
+  /** Server has a recovery hash (never exposed). */
+  hasAccountRecovery?: boolean;
   createdAt: string; // ISO timestamp
   updatedAt: string;
 }
@@ -221,6 +225,8 @@ export interface AuthResponse {
   token: string;
   user: User;
   warning?: string;
+  /** Plaintext recovery passphrase — ONLY on signup response, once. */
+  recoveryCode?: string;
 }
 
 export interface MeResponse {
@@ -462,6 +468,7 @@ export type RootStackParamList = {
   Onboarding: undefined;
   Login: undefined;
   Register: undefined;
+  RecoveryCode: undefined;
   ChatList: undefined;
   Chat: { chatId: string; contactName?: string; contactLanguage?: string };
   NewChat: undefined;
@@ -486,4 +493,5 @@ export const STORAGE_KEYS = {
   TOKEN: '@synapmsg/token',
   USER: '@synapmsg/user',
   ONBOARDED: '@synapmsg/onboarded',
+  PENDING_RECOVERY_CODE: '@synapmsg/pending_recovery_code_v1',
 } as const;

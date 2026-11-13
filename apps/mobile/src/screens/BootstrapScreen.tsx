@@ -55,8 +55,8 @@ export function BootstrapScreen(): JSX.Element {
       <View style={styles.warningBox}>
         <Feather name="alert-triangle" size={22} color={colors.warning ?? '#F5A623'} />
         <Text style={styles.warningText}>
-          Si pierdes este teléfono y no agregaste un correo, no podrás recuperar la
-          cuenta.
+          En la siguiente pantalla te damos un código de 12 caracteres. Apúntalo en
+          papel: es la única forma de recuperar tu cuenta si pierdes el teléfono.
         </Text>
       </View>
 

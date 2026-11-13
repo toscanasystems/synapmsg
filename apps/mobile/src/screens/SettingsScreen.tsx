@@ -149,6 +149,7 @@ export function SettingsScreen(): JSX.Element {
   const token = useAuthStore((s) => s.token);
   const logout = useAuthStore((s) => s.logout);
   const setUser = useAuthStore((s) => s.setUser);
+  const pendingRecoveryCode = useAuthStore((s) => s.pendingRecoveryCode);
   const themeMode = useThemeStore((s) => s.mode);
   const setThemeMode = useThemeStore((s) => s.setMode);
 
@@ -606,6 +607,35 @@ export function SettingsScreen(): JSX.Element {
           Cuenta, seguridad, privacidad y plan. Las acciones rápidas (nuevo chat,
           invitar, bots) están en la pestaña Herramientas.
         </Text>
+
+        {user.hasAccountRecovery && !user.accountRecoveryConfirmed ? (
+          <Pressable
+            style={styles.recoveryBanner}
+            onPress={() => {
+              if (pendingRecoveryCode) {
+                navigation.navigate('RecoveryCode');
+                return;
+              }
+              Alert.alert(
+                'Código de recuperación',
+                'Apuntá el código que te mostramos al crear la cuenta. Sin ese código no podés recuperar tu cuenta si perdés el teléfono.',
+              );
+            }}
+          >
+            <Feather name="alert-triangle" size={20} color="#fff" />
+            <View style={styles.recoveryBannerText}>
+              <Text style={styles.recoveryBannerTitle}>
+                Apuntá tu código de recuperación
+              </Text>
+              <Text style={styles.recoveryBannerSub}>
+                {pendingRecoveryCode
+                  ? 'Todavía no confirmaste. Tocá aquí para verlo de nuevo.'
+                  : 'Sin confirmar. Si lo perdiste, no hay otra copia.'}
+              </Text>
+            </View>
+            <Feather name="chevron-right" size={18} color="#fff" />
+          </Pressable>
+        ) : null}
 
         {/* Perfil estilo WhatsApp */}
         <Pressable
@@ -1991,6 +2021,28 @@ const styles = themed((colors) => ({
     fontSize: fontSize.caption,
     marginHorizontal: spacing.xl,
     marginBottom: spacing.lg,
+  },
+  recoveryBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.warning ?? '#C45C26',
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.lg,
+    borderRadius: radius.lg,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+  },
+  recoveryBannerText: { flex: 1 },
+  recoveryBannerTitle: {
+    color: '#fff',
+    fontSize: fontSize.bodyLg,
+    fontWeight: fontWeight.semibold,
+  },
+  recoveryBannerSub: {
+    color: 'rgba(255,255,255,0.9)',
+    fontSize: fontSize.caption,
+    marginTop: 2,
   },
   card: {
     backgroundColor: colors.surface,

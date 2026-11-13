@@ -17,6 +17,10 @@ import {
   formatPrivateNumber,
   looksLikePrivateNumber,
 } from '../lib/privateNumber';
+import {
+  generateRecoveryCode,
+  hashRecoveryCode,
+} from '../lib/accountRecovery';
 import { ipRateLimit } from '../middleware/ipRateLimit';
 
 const FIDO2_RP_ID = process.env.FIDO2_RP_ID || 'synapmsg.ai';
@@ -85,6 +89,8 @@ function serializeUser(user: {
   preferredTranslateMode: string;
   privateNumber?: string | null;
   privateNumberShared?: boolean | null;
+  accountRecoveryConfirmed?: boolean | null;
+  accountRecoveryHash?: string | null;
   plan?: string | null;
   planExpiresAt?: Date | null;
   mediaBytesUsed?: bigint | number | null;
@@ -108,6 +114,9 @@ function serializeUser(user: {
     privateNumber: pn,
     privateNumberFormatted: pn ? formatPrivateNumber(pn) : null,
     privateNumberShared: Boolean(user.privateNumberShared),
+    accountRecoveryConfirmed: Boolean(user.accountRecoveryConfirmed),
+    /** True if a recovery hash exists (never expose the hash itself). */
+    hasAccountRecovery: Boolean(user.accountRecoveryHash),
     preferredLanguage: user.preferredLanguage,
     preferredTranslateMode: user.preferredTranslateMode,
     plan,
@@ -201,6 +210,8 @@ router.post('/register', registerIpLimit, async (req: Request, res: Response, ne
     const rounds = Number(process.env.BCRYPT_ROUNDS) || 10;
     const passwordHash = await bcrypt.hash(password, rounds);
     const privateNumber = await allocatePrivateNumber();
+    const recoveryCode = generateRecoveryCode();
+    const accountRecoveryHash = await hashRecoveryCode(recoveryCode);
 
     let user;
     try {
@@ -212,7 +223,14 @@ router.post('/register', registerIpLimit, async (req: Request, res: Response, ne
           passwordHash,
           preferredLanguage: lang,
           privateNumber,
+          accountRecoveryHash,
+          accountRecoveryCreatedAt: new Date(),
+          accountRecoveryConfirmed: false,
         },
+      });
+      await prisma.privateNumberLedger.updateMany({
+        where: { privateNumber, firstUserId: null },
+        data: { firstUserId: user.id },
       });
     } catch (createErr) {
       const code = (createErr as { code?: string }).code;
@@ -232,7 +250,12 @@ router.post('/register', registerIpLimit, async (req: Request, res: Response, ne
       username: user.username,
     });
 
-    res.status(201).json({ token, user: serializeUser(user) });
+    // recoveryCode plaintext ONLY in this response — never logged / never stored.
+    res.status(201).json({
+      token,
+      user: serializeUser(user),
+      recoveryCode,
+    });
   } catch (err) {
     next(err);
   }
@@ -269,6 +292,8 @@ router.post('/bootstrap', registerIpLimit, async (req: Request, res: Response, n
     const name = formatPrivateNumber(privateNumber);
     const rounds = Number(process.env.BCRYPT_ROUNDS) || 10;
     const passwordHash = await bcrypt.hash(randomBytes(32).toString('hex'), rounds);
+    const recoveryCode = generateRecoveryCode();
+    const accountRecoveryHash = await hashRecoveryCode(recoveryCode);
 
     let user;
     try {
@@ -281,7 +306,14 @@ router.post('/bootstrap', registerIpLimit, async (req: Request, res: Response, n
           preferredLanguage,
           privateNumber,
           privateNumberShared: false,
+          accountRecoveryHash,
+          accountRecoveryCreatedAt: new Date(),
+          accountRecoveryConfirmed: false,
         },
+      });
+      await prisma.privateNumberLedger.updateMany({
+        where: { privateNumber, firstUserId: null },
+        data: { firstUserId: user.id },
       });
     } catch (createErr) {
       const code = (createErr as { code?: string }).code;
@@ -304,8 +336,9 @@ router.post('/bootstrap', registerIpLimit, async (req: Request, res: Response, n
     res.status(201).json({
       token,
       user: serializeUser(user),
+      recoveryCode,
       warning:
-        'Si pierdes este teléfono y no agregaste un correo, no podrás recuperar la cuenta.',
+        'Apunta tu código de recuperación en papel. Sin él no podrás recuperar la cuenta si pierdes el teléfono.',
     });
   } catch (err) {
     next(err);
@@ -568,6 +601,26 @@ router.get('/me', authMiddleware, async (req: Request, res: Response, next: Next
     next(err);
   }
 });
+
+/**
+ * POST /auth/recovery/confirm
+ * User confirms they wrote down the one-time recovery passphrase.
+ */
+router.post(
+  '/recovery/confirm',
+  authMiddleware,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = await prisma.user.update({
+        where: { id: req.user!.id },
+        data: { accountRecoveryConfirmed: true },
+      });
+      res.json({ user: serializeUser(user) });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
 
 export default router;
 export { serializeUser };

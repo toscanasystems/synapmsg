@@ -50,6 +50,7 @@ import { ContactsScreen } from './src/screens/ContactsScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { ToolsScreen } from './src/screens/ToolsScreen';
 import { CallScreen } from './src/screens/CallScreen';
+import { RecoveryCodeScreen } from './src/screens/RecoveryCodeScreen';
 import { registerPushToken } from './src/notifications/push';
 import { setupNotificationHandlers } from './src/notifications/setup';
 import { usersApi } from './src/api/messages';
@@ -73,6 +74,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 function RootNavigator(): JSX.Element {
   const isHydrated = useAuthStore((s) => s.isHydrated);
   const token = useAuthStore((s) => s.token);
+  const pendingRecoveryCode = useAuthStore((s) => s.pendingRecoveryCode);
   const bg = useThemeStore((s) => s.colors.background);
 
   if (!isHydrated) {
@@ -85,6 +87,13 @@ function RootNavigator(): JSX.Element {
 
   return (
     <Stack.Navigator
+      key={
+        token
+          ? pendingRecoveryCode
+            ? 'auth-recovery'
+            : 'auth-app'
+          : 'guest'
+      }
       screenOptions={{
         headerShown: false,
         animation: 'slide_from_right',
@@ -93,6 +102,9 @@ function RootNavigator(): JSX.Element {
     >
       {token ? (
         <>
+          {pendingRecoveryCode ? (
+            <Stack.Screen name="RecoveryCode" component={RecoveryCodeScreen} />
+          ) : null}
           <Stack.Screen name="ChatList" component={ChatListScreen} />
           <Stack.Screen name="Chat" component={ChatScreen} />
           <Stack.Screen name="NewChat" component={NewChatScreen} />
