@@ -40,8 +40,11 @@
                 Un producto de Toscana Systems, S.A.
               </a>
             </p>
+            <p className="mt-2 text-gray-400 text-sm max-w-sm leading-relaxed">
+              Synap de Toscana: 89-5399-8750
+            </p>
             <p className="mt-2 text-gray-500 text-sm max-w-sm leading-relaxed">
-              Edificio Santa María, Apt 9D, Zona 10, Guatemala, 01010
+              DIRECCION_FISCAL_PENDIENTE
             </p>
             <a
               href="https://www.toscanasystems.com"
