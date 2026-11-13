@@ -6,11 +6,11 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "synapmsg",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": true,
@@ -31,7 +31,7 @@
         "backgroundColor": "#000000"
       },
       "package": "com.synapmsg.app",
-      "versionCode": 87,
+      "versionCode": 88,
       "permissions": [
         "READ_CONTACTS",
         "CAMERA",

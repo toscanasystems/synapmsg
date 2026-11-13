@@ -11,7 +11,8 @@ import {
   lightColors,
 } from '../theme/palettes';
 
-export const THEME_STORAGE_KEY = '@synapmsg/theme_mode_v1';
+/** v2: default light/white chrome (resets prior dark-only installs). */
+export const THEME_STORAGE_KEY = '@synapmsg/theme_mode_v2';
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 
@@ -47,18 +48,22 @@ function snapshot(
 
 export const useThemeStore = create<ThemeState>((set, get) => ({
   hydrated: false,
-  mode: 'dark',
-  scheme: 'dark',
-  colors: darkColors,
+  mode: 'light',
+  scheme: 'light',
+  colors: lightColors,
 
   hydrate: async () => {
     try {
       const raw = await AsyncStorage.getItem(THEME_STORAGE_KEY);
+      // Default light (white background). Only honor an explicit prior choice.
       const mode: ThemeMode =
-        raw === 'light' || raw === 'dark' || raw === 'system' ? raw : 'dark';
+        raw === 'light' || raw === 'dark' || raw === 'system' ? raw : 'light';
       set({ ...snapshot(mode, Appearance.getColorScheme()), hydrated: true });
     } catch {
-      set({ hydrated: true });
+      set({
+        ...snapshot('light', Appearance.getColorScheme()),
+        hydrated: true,
+      });
     }
   },
 

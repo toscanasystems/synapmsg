@@ -114,7 +114,7 @@ android {
         applicationId 'com.synapmsg.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 87
+        versionCode 88
         versionName "1.1.12"
         ndk {
             // Publish APK solo arm64 (Samsung / phones modernos). Emulador x86 queda fuera.

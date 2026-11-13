@@ -7,13 +7,13 @@
 import { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import { useThemeStore } from '../store/theme';
-import { darkColors, type AppColors } from './palettes';
+import { lightColors, type AppColors } from './palettes';
 
 export type { AppColors } from './palettes';
 export { darkColors, lightColors } from './palettes';
 
 /** Live palette — Object.assign on theme change for JSX that reads colors.X. */
-export const colors: AppColors = { ...darkColors };
+export const colors: AppColors = { ...lightColors };
 
 useThemeStore.subscribe((s) => {
   Object.assign(colors, s.colors);

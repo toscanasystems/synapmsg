@@ -569,11 +569,12 @@ export function CallScreen(): JSX.Element {
 const styles = themed((colors) => ({
   root: {
     flex: 1,
-    backgroundColor: '#0B141A',
+    backgroundColor: colors.background,
     alignItems: 'center',
     paddingHorizontal: spacing.xxl,
   },
-  webRoot: { flex: 1, backgroundColor: '#000' },
+  // WebRTC surface stays dark so video frames read correctly.
+  webRoot: { flex: 1, backgroundColor: colors.background },
   webBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -607,7 +608,7 @@ const styles = themed((colors) => ({
     top: 48,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0B141A',
+    backgroundColor: colors.background,
     zIndex: 2,
   },
   webLoadingText: {
