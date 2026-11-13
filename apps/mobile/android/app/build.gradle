@@ -114,8 +114,8 @@ android {
         applicationId 'com.synapmsg.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 81
-        versionName "1.1.11"
+        versionCode 87
+        versionName "1.1.12"
         ndk {
             // Publish APK solo arm64 (Samsung / phones modernos). Emulador x86 queda fuera.
             abiFilters 'arm64-v8a'
@@ -128,15 +128,29 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        // Play / AAB only when SYNAPMSG_UPLOAD_STORE_FILE is set.
+        // Default stays debug so local APK install -r keeps working.
+        release {
+            def uploadStoreFile = System.getenv("SYNAPMSG_UPLOAD_STORE_FILE")
+            if (uploadStoreFile) {
+                storeFile file(uploadStoreFile)
+                storePassword System.getenv("SYNAPMSG_UPLOAD_STORE_PASSWORD")
+                keyAlias System.getenv("SYNAPMSG_UPLOAD_KEY_ALIAS")
+                keyPassword System.getenv("SYNAPMSG_UPLOAD_KEY_PASSWORD")
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // Local sideload APK: debug cert (unchanged). Play AAB: set SYNAPMSG_UPLOAD_* env.
+            if (System.getenv("SYNAPMSG_UPLOAD_STORE_FILE")) {
+                signingConfig signingConfigs.release
+            } else {
+                signingConfig signingConfigs.debug
+            }
             shrinkResources (findProperty('android.enableShrinkResourcesInReleaseBuilds')?.toBoolean() ?: false)
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"

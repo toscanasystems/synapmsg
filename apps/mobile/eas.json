@@ -24,6 +24,9 @@
     },
     "production": {
       "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.synapmsg.ai",
         "EXPO_PUBLIC_WS_URL": "wss://api.synapmsg.ai/ws"
