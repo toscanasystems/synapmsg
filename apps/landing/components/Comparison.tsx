@@ -7,7 +7,7 @@ type Row = {
 
 const ROWS: Row[] = [
   {
-    feature: "Chat Privado: servidor sin mensaje en claro",
+    feature: "Chat Privado: servidor sin mensaje legible",
     Synap: true,
   },
   {

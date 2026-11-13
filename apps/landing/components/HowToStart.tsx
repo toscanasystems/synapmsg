@@ -7,7 +7,7 @@
   {
     n: "02",
     title: "Empezá en modo Privado",
-    body: "El servidor no guarda el mensaje en claro: guarda un paquete que no puede leer.",
+    body: "El servidor no guarda el mensaje legible: guarda un paquete que no puede leer.",
   },
   {
     n: "03",

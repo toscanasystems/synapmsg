@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Synap — mensajería Privado / Nube",
   description:
-    "En un chat Privado el servidor no guarda el mensaje en claro. En Nube sí puede leerlo, y la app avisa antes. Lo demás todavía no está listo.",
+    "En un chat Privado el servidor no guarda el mensaje legible. En Nube sí puede leerlo, y la app avisa antes. Lo demás todavía no está listo.",
   keywords: [
     "mensajería",
     "chat",
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "Synap",
     description:
-      "Privado sin mensaje en claro en el servidor. Nube con aviso. Lo demás todavía no.",
+      "Privado sin mensaje legible en el servidor. Nube con aviso. Lo demás todavía no.",
   },
   robots: { index: true, follow: true },
   viewport: "width=device-width, initial-scale=1, maximum-scale=5",

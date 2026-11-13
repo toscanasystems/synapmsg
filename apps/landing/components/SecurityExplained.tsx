@@ -1,7 +1,7 @@
 const DEMOSTRADO = [
   {
     title: "Chat Privado",
-    body: "El servidor no guarda el mensaje en claro. Guarda un paquete cifrado que no puede leer.",
+    body: "El servidor no guarda el mensaje legible. Guarda un paquete cifrado que no puede leer.",
   },
   {
     title: "Chat Nube",

@@ -42,7 +42,7 @@ export default function PrivacyPage() {
               </li>
               <li>
                 <strong>Mensajes:</strong> el contenido de los chats se cifra extremo a extremo. No
-                leemos el texto en claro de tus conversaciones privadas.
+                leemos el texto legible de tus conversaciones privadas.
               </li>
               <li>
                 <strong>Traducción:</strong> el texto a traducir se procesa de forma temporal para

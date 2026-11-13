@@ -7,7 +7,7 @@ import {
 
 const CARDS = [
   {
-    title: "Tus mensajes no van en claro por el servidor",
+    title: "Tus mensajes no van legibles por el servidor",
     body: "En un chat Privado, el servidor guarda un sobre cifrado. Si alguien roba la base, no encuentra lo que escribiste.",
     Illu: IlluNoPlainOnServer,
   },
