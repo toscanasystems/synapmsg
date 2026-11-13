@@ -62,9 +62,10 @@ export function Hero() {
 
         <p className="mt-6 max-w-2xl text-xl md:text-2xl text-gray-200 leading-relaxed animate-slide-up">
           En un chat Privado, el mensaje se cifra en tu teléfono y el servidor solo guarda
-          un paquete que no puede leer. Si eliges un chat Nube, el servidor sí puede leerlo,
-          y la app te avisa antes de crearlo. La traducción en un chat Privado ocurre en tu
-          teléfono: el texto no sale de ahí.
+          un paquete que no puede leer. Nuestro servidor no ve desde dónde escribes. Si
+          eliges un chat Nube, el servidor sí puede leerlo, y la app te avisa antes de
+          crearlo. La traducción en un chat Privado ocurre en tu teléfono: el texto no sale
+          de ahí.
         </p>
 
         <ol className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 animate-slide-up">
