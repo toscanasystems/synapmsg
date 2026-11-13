@@ -37,12 +37,16 @@ npm run prove:signal      # dos cuentas Signal (si está cableado)
 
 ## 2b. Recuperación de cuenta (código de 12 caracteres)
 
+El correo es opcional y solo sirve para avisos. La recuperación de la cuenta se hace
+con el código de 12 caracteres.
+
 1. **Crear cuenta** (app): bootstrap o registro. Aparece la pantalla del código (letras grandes, guiones cada 4).
 2. **Apuntar en papel** el código. Tocá **Ya lo apunté**. Si tocás «Lo apunto después», en **Ajustes** debe aparecer el aviso naranja hasta confirmar.
 3. **Comprobar en base** (dev): la fila del usuario tiene `accountRecoveryHash` que empieza con `$argon2` y **no** contiene el código en claro.
 4. **Recuperar desde la web:** abrí `https://synapmsg.ai/recuperar/` (o build local de landing). Pegá el código → **Recuperar mi cuenta**. Debés ver el mismo número de 10 dígitos. El texto de la página dice que las conversaciones anteriores **no** se recuperan.
 5. **Teléfono perdido:** tras recuperar, las claves Signal de ese usuario en el servidor quedan borradas; un peer ya no obtiene bundle (`404`). Instalás Synap en el teléfono nuevo e iniciás sesión con el ticket/token de recuperación (cuando el cableado de login esté desplegado).
 6. **Límite:** más de 5 intentos por IP en un minuto → **429**.
+7. **Correo opcional:** en Ajustes, «Agregar correo para recibir avisos». No sirve para recuperar. Si la cuenta tiene correo y alguien usa el código, el servidor intenta mandar un aviso (fecha/hora + país); hace falta `SMTP_URL` o `RESEND_API_KEY` configurados.
 
 Prueba API rápida (dev): `node apps/api/scripts/_fase4_recover_proof.js` con API en `:3000`.
 

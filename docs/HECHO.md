@@ -8,6 +8,9 @@ Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 Recuperación de cuenta sin correo, con código de 12 caracteres.
 Probado en producción: mismo número, mensaje genérico en el fallo, y límite de intentos.
 
+El correo es opcional y solo sirve para avisos. La recuperación de la cuenta se hace
+con el código de 12 caracteres.
+
 ### Demostrado
 
 1. **Huella en base, nunca el código.** Alta/bootstrap guarda solo `accountRecoveryHash` argon2id; consulta de prueba con `plaintext_in_row: false`.
@@ -24,6 +27,7 @@ Conversaciones viejas: no se restauran (cifradas en el aparato perdido).
 ### Todavía no
 
 - Flujo completo web→app nueva con `loginTicket` cableado en la UI de login.
+- Aviso por correo al usar el código: el hook está cableado, pero falta configurar envío saliente (`SMTP_URL` o `RESEND_API_KEY` + provider). Sin eso el recover funciona igual y el aviso se omite.
 
 ## 2026-11-13 — Pieza 4 (llamada de voz en grupo)
 
