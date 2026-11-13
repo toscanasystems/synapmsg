@@ -24,6 +24,12 @@ import {
   verifyRecoveryCode,
 } from '../lib/accountRecovery';
 import { ipRateLimit, shortIpHash } from '../middleware/ipRateLimit';
+import {
+  approxPlaceFromRequest,
+  buildRecoveryUsedNotice,
+  formatNoticeWhen,
+  sendNoticeEmail,
+} from '../lib/outboundMail';
 
 const FIDO2_RP_ID = process.env.FIDO2_RP_ID || 'synapmsg.ai';
 const FIDO2_ORIGIN = process.env.FIDO2_ORIGIN || 'https://api.synapmsg.ai';
@@ -722,6 +728,21 @@ router.post(
       console.info(
         `[account-recover] ipHash=${ipHash} result=ok userId=${fresh.id.slice(0, 8)}`,
       );
+
+      // Optional notice only — never blocks recover; never includes code/number.
+      if (fresh.email) {
+        const notice = buildRecoveryUsedNotice({
+          when: formatNoticeWhen(),
+          place: approxPlaceFromRequest(
+            req.headers as unknown as Record<string, unknown>,
+          ),
+        });
+        void sendNoticeEmail({
+          to: fresh.email,
+          subject: notice.subject,
+          text: notice.text,
+        });
+      }
 
       res.json({
         ok: true,
