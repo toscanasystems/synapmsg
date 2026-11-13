@@ -3,6 +3,13 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-12 — Metadata de mensajes e IP del remitente
+
+El servidor no guarda la IP del remitente en la fila del mensaje ni en los registros.
+La IP se usa solo en memoria para contar intentos de entrada.
+Queda pendiente: Railway ve la IP en la conexión al enviar, porque el WebSocket de
+mensajes no pasa por el túnel de Cloudflare. Eso es trabajo posterior.
+
 ## 2026-11-12 — Cierre de sesión (APK liviano, HEAD, landing)
 
 ### Demostrado

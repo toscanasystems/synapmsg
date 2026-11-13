@@ -19,12 +19,20 @@ const DEMOSTRADO = [
     title: "Cuenta sin SIM",
     body: "Al instalar se te asigna un número de 10 dígitos. Sin correo y sin SIM. El correo es opcional para recuperar.",
   },
+  {
+    title: "Llamadas de voz y video (1 a 1)",
+    body: "WebRTC con relé TURN: la IP del peer no se comparte. Probado entre teléfonos reales.",
+  },
+  {
+    title: "Llamadas de voz en grupo",
+    body: "Hasta 8 en malla (sin mezclador en el servidor). Salir no corta la llamada para los demás. Relé TURN igual que en 1 a 1. La prueba en vivo con tres teléfonos sigue pendiente.",
+  },
 ];
 
 const TODAVIA_NO = [
   "Wipe remoto, PIN de coacción y llaves físicas como paquete cerrado.",
   "Más pares on-device que inglés↔español demostrados en dispositivo.",
-  "Llamadas de voz y video.",
+  "Prueba en vivo de llamada de grupo con tres teléfonos (matriz de 5).",
 ];
 export function SecurityExplained() {
   return (
