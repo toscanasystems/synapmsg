@@ -14,6 +14,7 @@ export type PendingCallInvite = {
   fromName?: string;
   callType: 'voice' | 'video';
   callRoom: string;
+  isGroup?: boolean;
   createdAt: string;
 };
 
@@ -48,20 +49,35 @@ export const callsApi = {
     ok: boolean;
     callRoom: string;
     peerOnline: boolean;
+    isGroup?: boolean;
     peers: CallReadyPeer[];
   }> {
     const { data } = await apiClient.post<{
       ok: boolean;
       callRoom: string;
       peerOnline: boolean;
+      isGroup?: boolean;
       peers: CallReadyPeer[];
     }>('/calls/invite', opts);
     return data;
   },
 
-  async accept(chatId: string): Promise<{ ok: boolean; callRoom: string }> {
-    const { data } = await apiClient.post<{ ok: boolean; callRoom: string }>(
-      '/calls/accept',
+  async accept(chatId: string): Promise<{
+    ok: boolean;
+    callRoom: string;
+    isGroup?: boolean;
+  }> {
+    const { data } = await apiClient.post<{
+      ok: boolean;
+      callRoom: string;
+      isGroup?: boolean;
+    }>('/calls/accept', { chatId });
+    return data;
+  },
+
+  async leave(chatId: string): Promise<{ ok: boolean; ended?: boolean }> {
+    const { data } = await apiClient.post<{ ok: boolean; ended?: boolean }>(
+      '/calls/leave',
       { chatId },
     );
     return data;

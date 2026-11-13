@@ -310,18 +310,21 @@ export type WsClientMessage =
       callType?: 'voice' | 'video';
       fromName?: string;
       callRoom?: string;
+      isGroup?: boolean;
     }
   | {
       type: 'call_accept';
       chatId: string;
       callType?: 'voice' | 'video';
       callRoom?: string;
+      isGroup?: boolean;
     }
   | {
       type: 'call_room';
       chatId: string;
       callRoom: string;
       callType?: 'voice' | 'video';
+      isGroup?: boolean;
     }
   | {
       type: 'call_ringing';
@@ -329,10 +332,24 @@ export type WsClientMessage =
       callRoom?: string;
       callType?: 'voice' | 'video';
       peerOnline?: boolean;
+      isGroup?: boolean;
     }
-  | { type: 'call_reject'; chatId: string }
-  | { type: 'call_end'; chatId: string }
-  | { type: 'webrtc_signal'; chatId: string; signal: unknown }
+  | { type: 'call_reject'; chatId: string; isGroup?: boolean }
+  | { type: 'call_end'; chatId: string; isGroup?: boolean }
+  | { type: 'call_leave'; chatId: string; isGroup?: boolean }
+  | { type: 'call_mute'; chatId: string; muted: boolean; isGroup?: boolean }
+  | {
+      type: 'call_peer_status';
+      chatId: string;
+      status: 'joining' | 'connected' | 'disconnected';
+      isGroup?: boolean;
+    }
+  | {
+      type: 'webrtc_signal';
+      chatId: string;
+      signal: unknown;
+      toUserId?: string;
+    }
   | { type: 'ping' };
 
 /** Inbound frame envelope sent from server → client. */
@@ -365,18 +382,20 @@ export type WsServerMessage =
       lastSeenAt?: string;
     }
   | {
-      type: 'call_invite' | 'call_accept' | 'call_reject' | 'call_end';
+      type: 'call_invite' | 'call_accept' | 'call_reject' | 'call_end' | 'call_leave';
       chatId: string;
       fromUserId?: string;
       fromName?: string;
       callType?: 'voice' | 'video';
       callRoom?: string;
+      isGroup?: boolean;
     }
   | {
       type: 'call_room';
       chatId: string;
       callRoom: string;
       callType?: 'voice' | 'video';
+      isGroup?: boolean;
     }
   | {
       type: 'call_ringing';
@@ -384,11 +403,35 @@ export type WsServerMessage =
       callRoom?: string;
       callType?: 'voice' | 'video';
       peerOnline?: boolean;
+      isGroup?: boolean;
+    }
+  | {
+      type: 'call_roster';
+      chatId: string;
+      callRoom?: string;
+      callType?: 'voice';
+      isGroup?: boolean;
+      members: Array<{
+        userId: string;
+        name: string;
+        muted: boolean;
+        status: string;
+        joinedAt?: number;
+      }>;
+    }
+  | {
+      type: 'call_mute';
+      chatId: string;
+      fromUserId?: string;
+      muted?: boolean;
+      callRoom?: string;
+      isGroup?: boolean;
     }
   | {
       type: 'webrtc_signal';
       chatId: string;
       fromUserId?: string;
+      toUserId?: string;
       signal: unknown;
     }
   | { type: 'pong' }
@@ -432,6 +475,7 @@ export type RootStackParamList = {
     callType: 'voice' | 'video';
     incoming?: boolean;
     callRoom?: string;
+    isGroup?: boolean;
   };
 };
 

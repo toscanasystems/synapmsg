@@ -193,12 +193,14 @@ app.get('/call', (req: Request, res: Response) => {
   // Allow Jitsi iframe / WebRTC in WebView (helmet CORP can block third-party media).
   res.removeHeader('Cross-Origin-Resource-Policy');
   res.removeHeader('Cross-Origin-Embedder-Policy');
+  // Pieza 4: group voice mesh page (no SFU / no mixer).
+  const isGroupCall = String(req.query.group || '') === '1' && !isJitsi;
   res.sendFile(
     path.join(
       __dirname,
       '..',
       'public',
-      isJitsi ? 'call-jitsi.html' : 'call.html',
+      isJitsi ? 'call-jitsi.html' : isGroupCall ? 'call-group.html' : 'call.html',
     ),
   );
 });

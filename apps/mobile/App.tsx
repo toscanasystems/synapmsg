@@ -310,6 +310,7 @@ export default function App(): JSX.Element {
         callType: msg.callType === 'video' ? 'video' : 'voice',
         incoming: true,
         callRoom: room,
+        isGroup: 'isGroup' in msg ? Boolean(msg.isGroup) : false,
       });
     });
     return unsub;
@@ -367,6 +368,7 @@ export default function App(): JSX.Element {
           callType: inv.callType === 'video' ? 'video' : 'voice',
           incoming: true,
           callRoom: inv.callRoom,
+          isGroup: Boolean(inv.isGroup),
         });
       } catch {
         /* ignore */

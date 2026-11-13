@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Synapmsg Group Voice</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; background: #0B141A; color: #fff; font-family: system-ui, sans-serif; overflow: hidden; }
+    #wrap { display: flex; flex-direction: column; height: 100%; padding: 12px 12px 88px; }
+    #status { color: #40C0C0; font-size: 14px; text-align: center; margin-bottom: 10px; white-space: pre-line; min-height: 36px; }
+    #roster { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+    .peer {
+      display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+      background: #152028; border-radius: 14px; border: 1px solid #1f2f38;
+    }
+    .peer.me { border-color: #30B0B0; }
+    .peer.muted .dot { background: #E53935; }
+    .peer.disconnected { opacity: 0.55; }
+    .avatar {
+      width: 44px; height: 44px; border-radius: 22px; background: #30B0B0; color: #000;
+      display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px;
+    }
+    .meta { flex: 1; min-width: 0; }
+    .meta .name { font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .meta .state { font-size: 12px; color: #8aa0ab; margin-top: 2px; }
+    .dot { width: 10px; height: 10px; border-radius: 5px; background: #25D366; }
+    #controls {
+      position: absolute; left: 0; right: 0; bottom: 16px; display: flex;
+      justify-content: center; gap: 16px; z-index: 4;
+    }
+    button.ctrl {
+      width: 56px; height: 56px; border-radius: 28px; border: none; font-size: 22px;
+      background: #2A2A2A; color: #fff;
+    }
+    button.ctrl.off { background: #E53935; }
+    button#leave { background: #E53935; width: 64px; height: 64px; border-radius: 32px; }
+    audio { display: none; }
+  </style>
+</head>
+<body>
+  <div id="wrap">
+    <div id="status">Conectando llamada de grupo…</div>
+    <div id="roster"></div>
+  </div>
+  <div id="controls">
+    <button class="ctrl" id="muteMic" title="Silenciar">🎤</button>
+    <button class="ctrl" id="leave" title="Salir">🚪</button>
+  </div>
+  <script>
+(function () {
+  /**
+   * Pieza 4 — group voice mesh (no SFU, no audio mixer).
+   * Each peer keeps one RTCPeerConnection per other member.
+   * Media: audio-only, iceTransportPolicy=relay (TURN).
+   * Late joiners offer to existing members; leave closes only that edge.
+   */
+  const params = new URLSearchParams(location.search);
+  const token = params.get('token') || '';
+  const chatId = params.get('chatId') || '';
+  const displayName = params.get('name') || 'Synapmsg';
+  const myUserId = params.get('userId') || '';
+  const apiBase = params.get('api') || (location.protocol + '//' + location.host);
+  const wsBase = params.get('ws') || ((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  const MAX = 8;
+
+  const statusEl = document.getElementById('status');
+  const rosterEl = document.getElementById('roster');
+  const muteMicBtn = document.getElementById('muteMic');
+
+  function setStatus(t) { statusEl.textContent = t; }
+  function postNative(obj) {
+    try {
+      if (window.ReactNativeWebView) window.ReactNativeWebView.postMessage(JSON.stringify(obj));
+    } catch (_) {}
+  }
+
+  let ws = null;
+  let localStream = null;
+  let micOn = true;
+  let hungUp = false;
+  let wsRetry = 0;
+  let wsRetryTimer = null;
+  let wakeLock = null;
+  let iceServers = [{ urls: 'stun:stun.cloudflare.com:3478' }];
+  let iceTransportPolicy = 'relay';
+  const allowDirectParam = params.get('allowDirect') === '1';
+
+  /** @type {Map<string, { pc: RTCPeerConnection, pendingIce: any[], polite: boolean, makingOffer: boolean, audio: HTMLAudioElement, status: string, name: string, muted: boolean, iceRestarts: number }>} */
+  const peers = new Map();
+  /** @type {Map<string, { userId: string, name: string, muted: boolean, status: string }>} */
+  const roster = new Map();
+
+  async function holdWakeLock() {
+    try {
+      if (navigator.wakeLock && navigator.wakeLock.request) {
+        wakeLock = await navigator.wakeLock.request('screen');
+      }
+    } catch (_) {}
+  }
+
+  async function loadIceFromConfig() {
+    try {
+      const q = allowDirectParam ? '?allowDirect=1' : '';
+      const r = await fetch(apiBase.replace(/\/$/, '') + '/call/config' + q, {
+        headers: token ? { Authorization: 'Bearer ' + token } : {},
+      });
+      if (!r.ok) return;
+      const cfg = await r.json();
+      if (Array.isArray(cfg.iceServers) && cfg.iceServers.length) iceServers = cfg.iceServers;
+      if (cfg.iceTransportPolicy === 'relay' || cfg.iceTransportPolicy === 'all') {
+        iceTransportPolicy = cfg.iceTransportPolicy;
+      }
+      if (!allowDirectParam) iceTransportPolicy = 'relay';
+      postNative({ type: 'ice-config', policy: iceTransportPolicy, provider: cfg.provider || 'unknown', group: true });
+    } catch (_) {}
+  }
+
+  function sendSignal(toUserId, payload) {
+    if (!ws || ws.readyState !== 1 || !toUserId) return;
+    ws.send(JSON.stringify({
+      type: 'webrtc_signal',
+      chatId,
+      toUserId,
+      signal: payload,
+    }));
+  }
+
+  function sendWs(type, extra) {
+    if (!ws || ws.readyState !== 1) return;
+    ws.send(JSON.stringify(Object.assign({ type: type, chatId: chatId }, extra || {})));
+  }
+
+  function ipFromCandidate(cand) {
+    if (!cand) return null;
+    const s = typeof cand === 'string' ? cand : (cand.candidate || '');
+    const m = s.match(/\s(\d{1,3}(?:\.\d{1,3}){3})\s+\d+\s+typ\s+(\w+)/);
+    if (m) return { ip: m[1], typ: m[2] };
+    return null;
+  }
+
+  function renderRoster() {
+    const rows = [];
+    // Me first
+    rows.push({
+      userId: myUserId || 'me',
+      name: displayName + ' (tú)',
+      muted: !micOn,
+      status: 'connected',
+      me: true,
+    });
+    peers.forEach((p, id) => {
+      rows.push({
+        userId: id,
+        name: p.name || id.slice(0, 8),
+        muted: p.muted,
+        status: p.status,
+        me: false,
+      });
+    });
+    // Include ringing/roster-only people not yet connected
+    roster.forEach((m, id) => {
+      if (id === myUserId) return;
+      if (peers.has(id)) return;
+      if (m.status === 'ringing') {
+        rows.push({ userId: id, name: m.name, muted: false, status: 'ringing', me: false });
+      }
+    });
+
+    rosterEl.innerHTML = rows.map((r) => {
+      const cls = ['peer'];
+      if (r.me) cls.push('me');
+      if (r.muted) cls.push('muted');
+      if (r.status === 'disconnected' || r.status === 'ringing') cls.push('disconnected');
+      const state =
+        r.status === 'connected' ? (r.muted ? 'Micrófono apagado' : 'En la llamada') :
+        r.status === 'joining' ? 'Conectando…' :
+        r.status === 'disconnected' ? 'Sin conexión' :
+        r.status === 'ringing' ? 'Sonando…' : r.status;
+      const initial = (r.name.trim()[0] || '?').toUpperCase();
+      return (
+        '<div class="' + cls.join(' ') + '" data-id="' + r.userId + '">' +
+          '<div class="avatar">' + initial + '</div>' +
+          '<div class="meta"><div class="name">' + escapeHtml(r.name) + '</div>' +
+          '<div class="state">' + state + '</div></div>' +
+          '<div class="dot"></div>' +
+        '</div>'
+      );
+    }).join('');
+    postNative({ type: 'roster', members: rows, count: Math.max(0, rows.length) });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    })[c]);
+  }
+
+  async function ensureMedia() {
+    if (localStream) return localStream;
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: false,
+    });
+    postNative({ type: 'media-ok', video: false, group: true });
+    return localStream;
+  }
+
+  function assertEncryptedSdp(sdp) {
+    const body = (sdp && sdp.sdp) || '';
+    if (!body || !/a=fingerprint:/i.test(body)) {
+      throw new Error('SDP sin fingerprint DTLS — llamada abortada');
+    }
+    return sdp;
+  }
+
+  async function ensurePeer(peerId, name) {
+    if (!peerId || peerId === myUserId) return null;
+    if (peers.has(peerId)) {
+      const existing = peers.get(peerId);
+      if (name) existing.name = name;
+      return existing;
+    }
+    if (peers.size >= MAX - 1) {
+      setStatus('Límite de malla: máx. ' + MAX + ' personas (sin mezclador).');
+      return null;
+    }
+
+    const polite = String(myUserId) > String(peerId); // higher id answers
+    const audio = document.createElement('audio');
+    audio.autoplay = true;
+    audio.setAttribute('playsinline', 'true');
+    document.body.appendChild(audio);
+
+    const pc = new RTCPeerConnection({
+      iceServers,
+      iceTransportPolicy,
+      iceCandidatePoolSize: 4,
+    });
+    const entry = {
+      pc,
+      pendingIce: [],
+      polite,
+      makingOffer: false,
+      audio,
+      status: 'joining',
+      name: name || peerId.slice(0, 8),
+      muted: false,
+      iceRestarts: 0,
+    };
+    peers.set(peerId, entry);
+
+    const stream = await ensureMedia();
+    stream.getTracks().forEach((t) => pc.addTrack(t, stream));
+
+    pc.onicecandidate = (ev) => {
+      if (!ev.candidate) return;
+      const parsed = ipFromCandidate(ev.candidate);
+      if (parsed && parsed.typ !== 'relay' && iceTransportPolicy === 'relay') {
+        postNative({ type: 'ice-leak', side: 'local', ip: parsed.ip, typ: parsed.typ, peerId });
+        return;
+      }
+      sendSignal(peerId, { kind: 'ice', candidate: ev.candidate });
+    };
+
+    pc.ontrack = (ev) => {
+      const ms = ev.streams[0] || new MediaStream([ev.track]);
+      entry.audio.srcObject = ms;
+      try { entry.audio.play(); } catch (_) {}
+      entry.status = 'connected';
+      renderRoster();
+      setStatus('Conectado · relé · malla ' + peers.size + ' enlace(s)');
+      postNative({ type: 'connected', policy: iceTransportPolicy, group: true, peers: peers.size });
+      void logPair(peerId);
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      const s = pc.iceConnectionState;
+      if (s === 'connected' || s === 'completed') {
+        entry.status = 'connected';
+        entry.iceRestarts = 0;
+        sendWs('call_peer_status', { status: 'connected' });
+        renderRoster();
+        void logPair(peerId);
+      } else if (s === 'disconnected') {
+        entry.status = 'disconnected';
+        sendWs('call_peer_status', { status: 'disconnected' });
+        renderRoster();
+        setStatus('Sin conexión con ' + entry.name + '… reenganchando');
+        setTimeout(() => {
+          if (hungUp || !peers.has(peerId)) return;
+          if (pc.iceConnectionState === 'disconnected' && entry.iceRestarts < 3) {
+            entry.iceRestarts += 1;
+            try {
+              pc.restartIce();
+              if (!entry.polite) void makeOffer(peerId, true);
+            } catch (_) {}
+          }
+        }, 1600);
+      } else if (s === 'failed') {
+        entry.status = 'disconnected';
+        renderRoster();
+        if (entry.iceRestarts < 4) {
+          entry.iceRestarts += 1;
+          try {
+            pc.restartIce();
+            if (!entry.polite) void makeOffer(peerId, true);
+          } catch (_) {}
+        }
+      }
+    };
+
+    renderRoster();
+    return entry;
+  }
+
+  async function logPair(peerId) {
+    const entry = peers.get(peerId);
+    if (!entry) return;
+    try {
+      const stats = await entry.pc.getStats();
+      let selected = null;
+      stats.forEach((r) => {
+        if (r.type === 'candidate-pair' && (r.selected || r.nominated) && r.state === 'succeeded') selected = r;
+      });
+      if (!selected) return;
+      const remote = stats.get(selected.remoteCandidateId);
+      const info = {
+        type: 'ice-pair',
+        policy: iceTransportPolicy,
+        peerId,
+        remote: remote
+          ? { ip: remote.address || remote.ip, typ: remote.candidateType, port: remote.port }
+          : null,
+      };
+      postNative(info);
+      if (info.remote) {
+        setStatus(
+          'Conectado · relé\nremoto: ' + info.remote.typ + ' ' + info.remote.ip +
+          ' · malla ' + peers.size,
+        );
+      }
+    } catch (_) {}
+  }
+
+  async function makeOffer(peerId, force) {
+    const entry = await ensurePeer(peerId);
+    if (!entry) return;
+    if (entry.polite && !force) return; // polite waits for offer
+    try {
+      entry.makingOffer = true;
+      await entry.pc.setLocalDescription(await entry.pc.createOffer({ iceRestart: !!force }));
+      sendSignal(peerId, { kind: 'sdp', sdp: assertEncryptedSdp(entry.pc.localDescription) });
+    } finally {
+      entry.makingOffer = false;
+    }
+  }
+
+  async function onSignal(fromUserId, signal) {
+    if (!fromUserId || !signal || !signal.kind) return;
+    const entry = await ensurePeer(fromUserId);
+    if (!entry) return;
+
+    if (signal.kind === 'ready') {
+      // Late joiner / peer ready: non-polite side offers.
+      if (!entry.polite) await makeOffer(fromUserId, false);
+      return;
+    }
+
+    if (signal.kind === 'ice') {
+      if (!signal.candidate) return;
+      if (!entry.pc.remoteDescription) {
+        entry.pendingIce.push(signal.candidate);
+        return;
+      }
+      try { await entry.pc.addIceCandidate(signal.candidate); } catch (_) {}
+      return;
+    }
+
+    if (signal.kind === 'sdp' && signal.sdp) {
+      const desc = signal.sdp;
+      const offerCollision =
+        desc.type === 'offer' && (entry.makingOffer || entry.pc.signalingState !== 'stable');
+      if (!entry.polite && offerCollision) return;
+      await entry.pc.setRemoteDescription(assertEncryptedSdp(desc));
+      while (entry.pendingIce.length) {
+        const c = entry.pendingIce.shift();
+        try { await entry.pc.addIceCandidate(c); } catch (_) {}
+      }
+      if (desc.type === 'offer') {
+        await entry.pc.setLocalDescription(await entry.pc.createAnswer());
+        sendSignal(fromUserId, { kind: 'sdp', sdp: assertEncryptedSdp(entry.pc.localDescription) });
+      }
+    }
+  }
+
+  function closePeer(peerId) {
+    const entry = peers.get(peerId);
+    if (!entry) return;
+    try { entry.pc.close(); } catch (_) {}
+    try { entry.audio.remove(); } catch (_) {}
+    peers.delete(peerId);
+    renderRoster();
+  }
+
+  function applyRoster(members) {
+    if (!Array.isArray(members)) return;
+    const alive = new Set();
+    members.forEach((m) => {
+      if (!m || !m.userId) return;
+      alive.add(m.userId);
+      roster.set(m.userId, {
+        userId: m.userId,
+        name: m.name || m.userId.slice(0, 8),
+        muted: !!m.muted,
+        status: m.status || 'joining',
+      });
+      if (m.userId === myUserId) return;
+      if (m.status === 'ringing') return;
+      void (async () => {
+        const entry = await ensurePeer(m.userId, m.name);
+        if (!entry) return;
+        entry.name = m.name || entry.name;
+        entry.muted = !!m.muted;
+        if (m.status === 'disconnected') entry.status = 'disconnected';
+        // Announce ready so edges form (late join: we offer if non-polite).
+        sendSignal(m.userId, { kind: 'ready' });
+        if (!entry.polite) void makeOffer(m.userId, false);
+        renderRoster();
+      })();
+    });
+    // Close edges for people who left (except still-ringing ghosts).
+    [...peers.keys()].forEach((id) => {
+      if (!alive.has(id)) closePeer(id);
+    });
+    renderRoster();
+  }
+
+  function leave() {
+    if (hungUp) return;
+    hungUp = true;
+    if (wsRetryTimer) clearTimeout(wsRetryTimer);
+    try { if (wakeLock) wakeLock.release(); } catch (_) {}
+    try {
+      if (ws && ws.readyState === 1) {
+        ws.send(JSON.stringify({ type: 'call_leave', chatId }));
+      }
+    } catch (_) {}
+    try { if (ws) ws.close(); } catch (_) {}
+    [...peers.keys()].forEach(closePeer);
+    if (localStream) {
+      localStream.getTracks().forEach((t) => { try { t.stop(); } catch (_) {} });
+      localStream = null;
+    }
+    postNative({ type: 'hangup', leave: true, group: true });
+  }
+
+  muteMicBtn.onclick = () => {
+    micOn = !micOn;
+    if (localStream) localStream.getAudioTracks().forEach((t) => { t.enabled = micOn; });
+    muteMicBtn.classList.toggle('off', !micOn);
+    muteMicBtn.textContent = micOn ? '🎤' : '🔇';
+    sendWs('call_mute', { muted: !micOn });
+    renderRoster();
+    postNative({ type: 'mic-muted', muted: !micOn, group: true });
+  };
+  document.getElementById('leave').onclick = leave;
+
+  function connectWs() {
+    if (hungUp) return;
+    const url = wsBase + (wsBase.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
+    ws = new WebSocket(url);
+    ws.onopen = async () => {
+      wsRetry = 0;
+      void holdWakeLock();
+      setStatus('Permisos de micrófono…');
+      try {
+        await ensureMedia();
+        setStatus('En malla · esperando participantes…');
+        sendWs('call_peer_status', { status: 'joining' });
+        // Ask server roster via HTTP too
+        try {
+          const r = await fetch(apiBase.replace(/\/$/, '') + '/calls/roster/' + encodeURIComponent(chatId), {
+            headers: { Authorization: 'Bearer ' + token },
+          });
+          if (r.ok) {
+            const data = await r.json();
+            if (data.members) applyRoster(data.members);
+          }
+        } catch (_) {}
+        postNative({ type: 'media-ok', video: false, group: true });
+      } catch (e) {
+        const msg = (e && e.message) ? e.message : String(e);
+        setStatus('Activa el micrófono\n' + msg);
+        postNative({ type: 'error', message: msg });
+      }
+    };
+    ws.onmessage = async (ev) => {
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch { return; }
+      if (msg.type === 'webrtc_signal' && msg.chatId === chatId && msg.signal && msg.fromUserId) {
+        await onSignal(msg.fromUserId, msg.signal);
+      }
+      if (msg.type === 'call_roster' && msg.chatId === chatId && Array.isArray(msg.members)) {
+        applyRoster(msg.members);
+      }
+      if (msg.type === 'call_accept' && msg.chatId === chatId && msg.fromUserId && msg.fromUserId !== myUserId) {
+        const entry = await ensurePeer(msg.fromUserId, msg.fromName);
+        if (entry) {
+          sendSignal(msg.fromUserId, { kind: 'ready' });
+          if (!entry.polite) void makeOffer(msg.fromUserId, false);
+        }
+      }
+      if (msg.type === 'call_leave' && msg.chatId === chatId && msg.fromUserId) {
+        closePeer(msg.fromUserId);
+        roster.delete(msg.fromUserId);
+        renderRoster();
+        setStatus('Alguien salió · la llamada sigue');
+      }
+      if (msg.type === 'call_mute' && msg.chatId === chatId && msg.fromUserId) {
+        const entry = peers.get(msg.fromUserId);
+        if (entry) {
+          entry.muted = msg.muted === true;
+          renderRoster();
+        }
+        const r = roster.get(msg.fromUserId);
+        if (r) r.muted = msg.muted === true;
+      }
+      if (msg.type === 'call_end' && msg.chatId === chatId) {
+        setStatus('Llamada de grupo finalizada');
+        setTimeout(leave, 400);
+      }
+    };
+    ws.onclose = () => {
+      if (hungUp) return;
+      peers.forEach((p) => { p.status = 'disconnected'; });
+      renderRoster();
+      setStatus('Sin conexión… reenganchando');
+      sendWs('call_peer_status', { status: 'disconnected' });
+      const delay = Math.min(8000, 800 * Math.pow(1.6, wsRetry++));
+      wsRetryTimer = setTimeout(connectWs, delay);
+    };
+  }
+
+  (async function boot() {
+    renderRoster();
+    await loadIceFromConfig();
+    connectWs();
+  })();
+})();
+  </script>
+</body>
+</html>

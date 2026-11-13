@@ -1078,14 +1078,23 @@ export function ChatScreen(): JSX.Element {
 
   const startCall = useCallback(
     (callType: 'voice' | 'video') => {
+      // Pieza 4: group is voice-only mesh (no SFU mixer). Video group later.
+      if (isGroup && callType === 'video') {
+        Alert.alert(
+          'Video en grupo',
+          'Por ahora las llamadas de grupo son solo de voz (cifradas, sin mezclador en el servidor). El video en grupo viene después.',
+        );
+        return;
+      }
       navigation.navigate('Call', {
         chatId,
         contactName,
-        callType,
+        callType: isGroup ? 'voice' : callType,
         incoming: false,
+        isGroup,
       });
     },
-    [navigation, chatId, contactName],
+    [navigation, chatId, contactName, isGroup],
   );
 
   const pickAndAnnounce = useCallback(

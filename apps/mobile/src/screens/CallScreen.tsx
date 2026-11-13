@@ -78,8 +78,14 @@ export function CallScreen(): JSX.Element {
   const navigation =
     useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const route = useRoute<RouteProp<RootStackParamList, 'Call'>>();
-  const { chatId, contactName, callType, incoming, callRoom: roomParam } =
-    route.params;
+  const {
+    chatId,
+    contactName,
+    callType,
+    incoming,
+    callRoom: roomParam,
+    isGroup: isGroupParam,
+  } = route.params;
   const me = useAuthStore((s) => s.user);
   const token = useAuthStore((s) => s.token);
 
@@ -90,12 +96,15 @@ export function CallScreen(): JSX.Element {
   const [webLoading, setWebLoading] = useState(true);
   const [statusHint, setStatusHint] = useState('Preparando…');
   const [callRoom, setCallRoom] = useState(roomParam || '');
+  const [isGroup, setIsGroup] = useState(Boolean(isGroupParam));
+  const [rosterHint, setRosterHint] = useState('');
   /** If user denies camera, keep the call but force video=0 in WebRTC. */
   const [forceAudioOnly, setForceAudioOnly] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ringTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const isVideo = callType === 'video' && !forceAudioOnly;
+  // Group calls are voice-only mesh (Pieza 4).
+  const isVideo = callType === 'video' && !forceAudioOnly && !isGroup;
 
   const callUrl = useMemo(() => {
     if (!callRoom) return '';
@@ -105,6 +114,7 @@ export function CallScreen(): JSX.Element {
       chatId,
       video: isVideo ? '1' : '0',
       name: me?.name || 'Synap',
+      userId: me?.id || '',
       role: incoming ? 'callee' : 'caller',
       lang: me?.preferredLanguage || 'es',
       api: API_BASE_URL,
@@ -112,11 +122,14 @@ export function CallScreen(): JSX.Element {
       engine: MEDIA_ENGINE,
       room: callRoom,
     });
+    if (isGroup) q.set('group', '1');
     return `${API_BASE_URL}/call?${q.toString()}`;
   }, [
     token,
     chatId,
     isVideo,
+    isGroup,
+    me?.id,
     me?.name,
     me?.preferredLanguage,
     incoming,
@@ -125,12 +138,20 @@ export function CallScreen(): JSX.Element {
 
   const hangUp = useCallback(() => {
     void stopRingtone();
-    wsManager.send('call_end', { chatId });
-    void callsApi.end(chatId).catch(() => undefined);
+    if (isGroup) {
+      // Leave without ending the call for everyone else.
+      wsManager.send('call_leave', { chatId });
+      void callsApi.leave(chatId).catch(() =>
+        callsApi.end(chatId).catch(() => undefined),
+      );
+    } else {
+      wsManager.send('call_end', { chatId });
+      void callsApi.end(chatId).catch(() => undefined);
+    }
     setPhase('ended');
     if (ringTimeoutRef.current) clearTimeout(ringTimeoutRef.current);
     if (navigation.canGoBack()) navigation.goBack();
-  }, [chatId, navigation]);
+  }, [chatId, isGroup, navigation]);
 
   const enterCall = useCallback(() => {
     void stopRingtone();
@@ -203,20 +224,28 @@ export function CallScreen(): JSX.Element {
         }
         const inv = await callsApi.invite({
           chatId,
-          callType,
+          callType: isGroup ? 'voice' : callType,
           fromName: me?.name,
         });
         if (inv.callRoom) setCallRoom(inv.callRoom);
-        setPhase('ringing');
-        if (inv.peerOnline) {
-          setStatusHint(
-            `Llamando a ${contactName}…\nSonando en el otro Synap…`,
-          );
+        if (inv.isGroup) setIsGroup(true);
+        // Group: caller enters the mesh room immediately; others join as they answer.
+        if (isGroup || inv.isGroup) {
+          setIsGroup(true);
+          enterCall();
+          setStatusHint('Llamada de grupo · esperando que entren…');
         } else {
-          const peerNames = inv.peers.map((p) => p.name).join(', ');
-          setStatusHint(
-            `Llamando a ${contactName}…\nAvisado por red.\nSi no suena: en el otro teléfono abrí Synap con la cuenta de ${peerNames || contactName} (mismo chat).`,
-          );
+          setPhase('ringing');
+          if (inv.peerOnline) {
+            setStatusHint(
+              `Llamando a ${contactName}…\nSonando en el otro Synap…`,
+            );
+          } else {
+            const peerNames = inv.peers.map((p) => p.name).join(', ');
+            setStatusHint(
+              `Llamando a ${contactName}…\nAvisado por red.\nSi no suena: en el otro teléfono abrí Synap con la cuenta de ${peerNames || contactName} (mismo chat).`,
+            );
+          }
         }
       } catch {
         // Fallback: legacy WS-only invite
@@ -251,8 +280,10 @@ export function CallScreen(): JSX.Element {
     chatId,
     callType,
     contactName,
+    enterCall,
     hangUp,
     incoming,
+    isGroup,
     me?.name,
     navigation,
     token,
@@ -284,13 +315,42 @@ export function CallScreen(): JSX.Element {
           );
         }
       }
+      if (
+        (msg.type === 'call_room' || msg.type === 'call_invite') &&
+        msg.chatId === chatId &&
+        'isGroup' in msg &&
+        msg.isGroup
+      ) {
+        setIsGroup(true);
+      }
       if (msg.type === 'call_accept' && msg.chatId === chatId) {
-        enterCall();
+        // 1:1: peer answered → enter. Group: already-in-call peers stay;
+        // ringing local user enters on their own Accept button.
+        if (!isGroup || !incoming) enterCall();
+        if (isGroup && !incoming) {
+          setStatusHint('Alguien entró a la llamada de grupo');
+        }
+      }
+      if (msg.type === 'call_roster' && msg.chatId === chatId) {
+        setIsGroup(true);
+        const members = msg.members || [];
+        const live = members.filter((m) => m.status !== 'ringing');
+        setRosterHint(
+          live.length
+            ? `${live.length} en la llamada` +
+                (live.some((m) => m.muted) ? ' · hay mic apagado' : '')
+            : 'Esperando participantes…',
+        );
+      }
+      if (msg.type === 'call_leave' && msg.chatId === chatId && isGroup) {
+        setStatusHint('Alguien salió · la llamada sigue');
+        return;
       }
       if (
         (msg.type === 'call_reject' || msg.type === 'call_end') &&
         msg.chatId === chatId
       ) {
+        if (isGroup && msg.type === 'call_reject') return;
         if (phase !== 'ended') {
           setStatusHint(
             msg.type === 'call_reject' ? 'Rechazada' : 'Llamada finalizada',
@@ -300,7 +360,7 @@ export function CallScreen(): JSX.Element {
       }
     });
     return unsub;
-  }, [chatId, contactName, enterCall, hangUp, incoming, phase]);
+  }, [chatId, contactName, enterCall, hangUp, incoming, isGroup, phase]);
 
   // Only open media WebView once opaque room is known.
   useEffect(() => {
@@ -348,12 +408,14 @@ export function CallScreen(): JSX.Element {
       <View style={[styles.webRoot, { paddingTop: insets.top }]}>
         <View style={styles.webBar}>
           <Text style={styles.webTitle} numberOfLines={1}>
-            {isVideo ? 'Videollamada' : 'Llamada'} · {contactName} · {clock}
-            {' · E2E'}
+            {isGroup
+              ? `Grupo · voz · ${clock} · E2E mesh`
+              : `${isVideo ? 'Videollamada' : 'Llamada'} · ${contactName} · ${clock} · E2E`}
+            {rosterHint ? ` · ${rosterHint}` : ''}
           </Text>
           <Pressable onPress={hangUp} style={styles.hangBtn} hitSlop={8}>
             <Feather name="phone-off" size={18} color="#fff" />
-            <Text style={styles.hangText}>Colgar</Text>
+            <Text style={styles.hangText}>{isGroup ? 'Salir' : 'Colgar'}</Text>
           </Pressable>
         </View>
 
@@ -463,7 +525,12 @@ export function CallScreen(): JSX.Element {
   return (
     <View style={[styles.root, { paddingTop: insets.top + spacing.xxl }]}>
       <Text style={styles.kind}>
-        {isVideo ? 'Videollamada' : 'Llamada'} Synap
+        {isGroup
+          ? 'Llamada de grupo · solo voz'
+          : isVideo
+            ? 'Videollamada'
+            : 'Llamada'}{' '}
+        Synap
       </Text>
       <UserAvatar name={contactName} size={96} />
       <Text style={styles.name}>{contactName}</Text>
@@ -489,8 +556,9 @@ export function CallScreen(): JSX.Element {
       )}
 
       <Text style={styles.hint}>
-        Audio cifrado de extremo a extremo (WebRTC). Si el otro no tiene Synap
-        abierto, le llega notificación para contestar.
+        {isGroup
+          ? 'Audio cifrado en malla (hasta 8). Cada quien entra y sale sin cortar a los demás. El servidor no mezcla ni oye el audio — solo señaliza.'
+          : 'Audio cifrado de extremo a extremo (WebRTC). Si el otro no tiene Synap abierto, le llega notificación para contestar.'}
       </Text>
     </View>
   );

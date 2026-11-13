@@ -19,6 +19,10 @@ import {
   assertPrivateRowOpaque,
   buildPrivateMessageDbFields,
 } from './privateEnvelope';
+import {
+  rosterOf,
+  type GroupCallSession,
+} from '../calls/groupSession';
 
 // ───────────────────────────────────────────────────────────
 // Connection registry: userId -> set of open sockets
@@ -807,32 +811,62 @@ interface ClientIncoming {
   callType?: unknown;
   fromName?: unknown;
   signal?: unknown;
+  toUserId?: unknown;
+  muted?: unknown;
+  status?: unknown;
 }
 
 function isString(v: unknown): v is string {
   return typeof v === 'string';
 }
 
+function broadcastCallRoster(session: GroupCallSession): void {
+  const roster = rosterOf(session);
+  for (const m of roster) {
+    sendToUser(m.userId, {
+      type: 'call_roster',
+      chatId: session.chatId,
+      callRoom: session.callRoom,
+      callType: 'voice',
+      isGroup: true,
+      members: roster,
+    });
+  }
+}
+
 async function relayCallEvent(
   userId: string,
   data: ClientIncoming,
-  type: 'call_invite' | 'call_accept' | 'call_reject' | 'call_end',
+  type: 'call_invite' | 'call_accept' | 'call_reject' | 'call_end' | 'call_leave',
 ): Promise<void> {
   const chatId = isString(data.chatId) ? data.chatId.trim() : '';
   if (!chatId) return;
 
+  const chat = await prisma.chat.findUnique({
+    where: { id: chatId },
+    select: { id: true, type: true },
+  });
+  if (!chat) return;
+
   const participants = await prisma.chatParticipant.findMany({
     where: { chatId },
-    select: { userId: true },
+    include: { user: { select: { id: true, name: true, pushToken: true } } },
   });
   const me = participants.find((p) => p.userId === userId);
   if (!me) return;
 
-  const callType =
+  const isGroup = chat.type === 'group';
+  // Pieza 4: group calls are voice-only (mesh). Video group comes later.
+  let callType: 'voice' | 'video' =
     data.callType === 'video' || data.callType === 'voice'
       ? data.callType
       : 'voice';
-  const fromName = isString(data.fromName) ? data.fromName : undefined;
+  if (isGroup) callType = 'voice';
+
+  const fromName =
+    isString(data.fromName) && data.fromName.trim()
+      ? data.fromName.trim().slice(0, 80)
+      : me.user.name || undefined;
 
   const {
     mintCallRoom,
@@ -840,27 +874,134 @@ async function relayCallEvent(
     getRememberedCallRoom,
     clearCallRoom,
   } = await import('../calls/config');
+  const groupSession = await import('../calls/groupSession');
+
+  // Group leave / end: exit without cutting others (unless last person).
+  if (isGroup && (type === 'call_end' || type === 'call_leave')) {
+    const session = groupSession.getSessionByChat(chatId);
+    if (!session) {
+      clearCallRoom(chatId);
+      const { clearPendingForChat } = await import('../calls/pending');
+      clearPendingForChat(chatId, userId);
+      return;
+    }
+    const { ended, remaining } = groupSession.leaveGroupSession(session, userId);
+    const { clearPendingForChat } = await import('../calls/pending');
+    clearPendingForChat(chatId, userId);
+    for (const p of participants) {
+      if (p.userId === userId) continue;
+      sendToUser(p.userId, {
+        type: 'call_leave',
+        chatId,
+        fromUserId: userId,
+        fromName,
+        callType: 'voice',
+        callRoom: session.callRoom,
+        isGroup: true,
+      });
+    }
+    if (ended) {
+      clearCallRoom(chatId);
+      clearPendingForChat(chatId);
+      for (const p of participants) {
+        sendToUser(p.userId, {
+          type: 'call_end',
+          chatId,
+          fromUserId: userId,
+          callType: 'voice',
+          isGroup: true,
+        });
+      }
+    } else {
+      broadcastCallRoster(session);
+      void remaining;
+    }
+    return;
+  }
+
+  // Group reject: stop ringing for this user only.
+  if (isGroup && type === 'call_reject') {
+    const session = groupSession.getSessionByChat(chatId);
+    if (session) {
+      groupSession.leaveGroupSession(session, userId);
+      broadcastCallRoster(session);
+    }
+    const { clearPendingForChat } = await import('../calls/pending');
+    clearPendingForChat(chatId, userId);
+    sendToUser(userId, {
+      type: 'call_reject',
+      chatId,
+      fromUserId: userId,
+      callType: 'voice',
+      isGroup: true,
+    });
+    return;
+  }
 
   let callRoom: string | undefined;
   if (type === 'call_invite') {
-    callRoom = mintCallRoom();
+    const existing = groupSession.getSessionByChat(chatId);
+    callRoom = existing?.callRoom || mintCallRoom();
     rememberCallRoom(chatId, callRoom);
+    if (isGroup) {
+      const session =
+        existing ||
+        groupSession.createGroupSession({
+          callRoom,
+          chatId,
+          createdBy: userId,
+          creatorName: fromName || me.user.name || 'Synap',
+        });
+      if (existing) {
+        groupSession.joinGroupSession(
+          session,
+          userId,
+          fromName || me.user.name || 'Synap',
+        );
+      }
+    }
   } else if (type === 'call_accept') {
     callRoom = getRememberedCallRoom(chatId) || mintCallRoom();
     rememberCallRoom(chatId, callRoom);
+    if (isGroup) {
+      let session = groupSession.getSessionByChat(chatId);
+      if (!session) {
+        session = groupSession.createGroupSession({
+          callRoom,
+          chatId,
+          createdBy: userId,
+          creatorName: fromName || me.user.name || 'Synap',
+        });
+      }
+      const joined = groupSession.joinGroupSession(
+        session,
+        userId,
+        fromName || me.user.name || 'Synap',
+      );
+      if (!joined) {
+        sendToUser(userId, {
+          type: 'error',
+          chatId,
+          status: 403,
+          message: `La llamada de grupo está llena (máx. ${groupSession.GROUP_CALL_MAX_MEMBERS}).`,
+        });
+        return;
+      }
+    }
   } else if (type === 'call_end' || type === 'call_reject') {
     clearCallRoom(chatId);
+    if (isGroup) groupSession.destroyGroupSessionByChat(chatId);
   } else {
     callRoom = getRememberedCallRoom(chatId) || undefined;
   }
 
-  // Caller needs the opaque room too (invite/accept).
   if (callRoom && (type === 'call_invite' || type === 'call_accept')) {
     sendToUser(userId, {
       type: 'call_room',
       chatId,
       callRoom,
       callType,
+      isGroup,
     });
   }
 
@@ -875,6 +1016,7 @@ async function relayCallEvent(
       fromUserId: userId,
       fromName,
       callType,
+      isGroup,
       ...(callRoom ? { callRoom } : {}),
     });
   }
@@ -882,45 +1024,65 @@ async function relayCallEvent(
   if (type === 'call_invite') {
     const peerOnline =
       peerDelivered > 0 || peerIds.some((id) => isUserConnected(id));
-    // HTTP fallback inbox so callee still sees the ring if WS is down.
     if (callRoom) {
       const { putPendingCall } = await import('../calls/pending');
-      for (const peerId of peerIds) {
+      const session = isGroup ? groupSession.getSessionByChat(chatId) : null;
+      for (const peer of participants) {
+        if (peer.userId === userId) continue;
         putPendingCall({
           chatId,
           fromUserId: userId,
           fromName,
-          toUserId: peerId,
+          toUserId: peer.userId,
           callType,
           callRoom,
+          isGroup,
         });
+        if (session) {
+          groupSession.markRinging(
+            session,
+            peer.userId,
+            peer.user.name || 'Synap',
+          );
+        }
       }
+      if (session) broadcastCallRoster(session);
     }
-    // Tell caller immediately if the peer has a live Synap WS.
     sendToUser(userId, {
       type: 'call_ringing',
       chatId,
       callRoom,
       callType,
       peerOnline,
+      isGroup,
     });
 
-    const others = await prisma.user.findMany({
-      where: { id: { in: peerIds } },
-      select: { pushToken: true },
-    });
     void pushToUserTokens(
-      others.map((u) => u.pushToken),
+      participants
+        .filter((p) => p.userId !== userId)
+        .map((p) => p.user.pushToken),
       fromName || 'Synap',
-      callType === 'video' ? 'Videollamada entrante' : 'Llamada entrante',
+      isGroup
+        ? 'Llamada de grupo entrante'
+        : callType === 'video'
+          ? 'Videollamada entrante'
+          : 'Llamada entrante',
       {
         type: 'call_invite',
         chatId,
         callType,
+        isGroup,
         ...(callRoom ? { callRoom } : {}),
         ...(fromName ? { fromName } : {}),
       },
     );
+  }
+
+  if (type === 'call_accept' && isGroup) {
+    const session = groupSession.getSessionByChat(chatId);
+    if (session) broadcastCallRoster(session);
+    const { clearPendingForChat } = await import('../calls/pending');
+    clearPendingForChat(chatId, userId);
   }
 }
 
@@ -981,9 +1143,56 @@ function handleIncomingMessage(socket: WebSocket, userId: string, data: ClientIn
     data.type === 'call_invite' ||
     data.type === 'call_accept' ||
     data.type === 'call_reject' ||
-    data.type === 'call_end'
+    data.type === 'call_end' ||
+    data.type === 'call_leave'
   ) {
     void relayCallEvent(userId, data, data.type);
+    return;
+  }
+
+  if (data.type === 'call_mute') {
+    const chatId = isString(data.chatId) ? data.chatId.trim() : '';
+    if (!chatId) return;
+    void (async () => {
+      const groupSession = await import('../calls/groupSession');
+      const session = groupSession.getSessionByChat(chatId);
+      if (!session || !session.members.has(userId)) return;
+      const muted = data.muted === true;
+      groupSession.setMemberMuted(session, userId, muted);
+      broadcastCallRoster(session);
+      for (const m of session.members.values()) {
+        if (m.userId === userId) continue;
+        sendToUser(m.userId, {
+          type: 'call_mute',
+          chatId,
+          fromUserId: userId,
+          muted,
+          callRoom: session.callRoom,
+          isGroup: true,
+        });
+      }
+    })();
+    return;
+  }
+
+  if (data.type === 'call_peer_status') {
+    const chatId = isString(data.chatId) ? data.chatId.trim() : '';
+    if (!chatId) return;
+    const statusRaw = isString(data.status) ? data.status : '';
+    const status =
+      statusRaw === 'connected' ||
+      statusRaw === 'disconnected' ||
+      statusRaw === 'joining'
+        ? statusRaw
+        : null;
+    if (!status) return;
+    void (async () => {
+      const groupSession = await import('../calls/groupSession');
+      const session = groupSession.getSessionByChat(chatId);
+      if (!session || !session.members.has(userId)) return;
+      groupSession.setMemberStatus(session, userId, status);
+      broadcastCallRoster(session);
+    })();
     return;
   }
 
@@ -997,12 +1206,28 @@ function handleIncomingMessage(socket: WebSocket, userId: string, data: ClientIn
       return;
     }
     if (encoded.length > 16_384) return; // drop oversized SDP/ICE floods
+    const toUserId = isString(data.toUserId) ? data.toUserId.trim() : '';
     void (async () => {
       const participants = await prisma.chatParticipant.findMany({
         where: { chatId },
         select: { userId: true },
       });
       if (!participants.some((p) => p.userId === userId)) return;
+
+      // Group mesh: unicast SDP/ICE. 1:1 may still broadcast if no toUserId.
+      if (toUserId) {
+        if (!participants.some((p) => p.userId === toUserId)) return;
+        if (toUserId === userId) return;
+        sendToUser(toUserId, {
+          type: 'webrtc_signal',
+          chatId,
+          fromUserId: userId,
+          toUserId,
+          signal: data.signal,
+        });
+        return;
+      }
+
       for (const p of participants) {
         if (p.userId === userId) continue;
         sendToUser(p.userId, {

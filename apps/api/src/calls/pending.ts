@@ -13,6 +13,7 @@ export type PendingCall = {
   toUserId: string;
   callType: 'voice' | 'video';
   callRoom: string;
+  isGroup?: boolean;
   createdAt: number;
   expiresAt: number;
 };
@@ -41,6 +42,7 @@ export function putPendingCall(
     toUserId: call.toUserId,
     callType: call.callType,
     callRoom: call.callRoom,
+    isGroup: call.isGroup === true,
     createdAt: Date.now(),
     expiresAt: Date.now() + (call.ttlMs ?? 90_000),
   };

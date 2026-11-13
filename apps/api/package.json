@@ -14,6 +14,7 @@
     "prisma:studio": "prisma studio",
     "typecheck": "tsc --noEmit",
     "test": "npm run build && node --test dist/messages/privateEnvelope.test.js dist/lib/jwtSecret.test.js",
+    "test:all": "npm run build && node --test \"dist/__tests__/**/*.test.js\"",
     "test:private-db": "npm run build && node scripts/test-private-db.js",
     "prove:private": "npm run build && node scripts/prove-private-no-plaintext.js",
     "prove:signal": "node scripts/prove-signal-two-accounts.js"
