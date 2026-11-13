@@ -1003,7 +1003,7 @@ export function ChatScreen(): JSX.Element {
           break;
         case 'report':
           void Linking.openURL(
-            `mailto:soporte@synapmsg.ai?subject=${encodeURIComponent(
+            `mailto:administrador@toscanasystems.com?subject=${encodeURIComponent(
               `Reporte chat ${chatId}`,
             )}&body=${encodeURIComponent(
               `Quiero reportar el chat con ${contactName} (${chatId}).`,

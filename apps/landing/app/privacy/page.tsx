@@ -99,8 +99,8 @@ export default function PrivacyPage() {
             <p>
               Según tu jurisdicción, puedes solicitar acceso, corrección, portabilidad o
               eliminación de tus datos personales. Contáctanos en{" "}
-              <a href="mailto:soporte@synapmsg.ai" className="text-accent underline">
-                soporte@synapmsg.ai
+              <a href="mailto:administrador@toscanasystems.com" className="text-accent underline">
+                administrador@toscanasystems.com
               </a>
               .
             </p>
@@ -128,8 +128,8 @@ export default function PrivacyPage() {
               Toscana Systems, S.A. — Guatemala
               <br />
               Email:{" "}
-              <a href="mailto:soporte@synapmsg.ai" className="text-accent underline">
-                soporte@synapmsg.ai
+              <a href="mailto:administrador@toscanasystems.com" className="text-accent underline">
+                administrador@toscanasystems.com
               </a>
               <br />
               Soporte:{" "}

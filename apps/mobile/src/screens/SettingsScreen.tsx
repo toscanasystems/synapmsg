@@ -1526,9 +1526,9 @@ export function SettingsScreen(): JSX.Element {
             icon="mail"
             iconBg="#30B0B0"
             title="Correo de soporte"
-            subtitle="soporte@synapmsg.ai"
+            subtitle="administrador@toscanasystems.com"
             onPress={() =>
-              void Linking.openURL('mailto:soporte@synapmsg.ai')
+              void Linking.openURL('mailto:administrador@toscanasystems.com')
             }
           />
           <SettingsRow

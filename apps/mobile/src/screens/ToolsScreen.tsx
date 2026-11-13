@@ -244,7 +244,7 @@ export function ToolsScreen(): JSX.Element {
         <ToolRow
           icon="help-circle"
           title="Soporte"
-          subtitle="Preguntas y contacto · soporte@synapmsg.ai"
+          subtitle="Preguntas y contacto · administrador@toscanasystems.com"
           onPress={() => {
             void Linking.openURL('https://synapmsg.ai/support');
           }}
@@ -252,9 +252,9 @@ export function ToolsScreen(): JSX.Element {
         <ToolRow
           icon="mail"
           title="Correo de soporte"
-          subtitle="soporte@synapmsg.ai"
+          subtitle="administrador@toscanasystems.com"
           onPress={() => {
-            void Linking.openURL('mailto:soporte@synapmsg.ai');
+            void Linking.openURL('mailto:administrador@toscanasystems.com');
           }}
         />
       </ScrollView>

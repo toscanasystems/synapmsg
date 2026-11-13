@@ -25,7 +25,7 @@ const faqs = [
   },
   {
     q: "¿Cómo elimino mi cuenta?",
-    a: "Escríbenos a soporte@synapmsg.ai desde el email de tu cuenta y procesaremos la eliminación.",
+    a: "Escríbenos a administrador@toscanasystems.com desde el email de tu cuenta y procesaremos la eliminación.",
   },
   {
     q: "¿Dónde está la política de privacidad?",
@@ -43,8 +43,8 @@ export default function SupportPage() {
         <h1 className="mt-6 font-serif text-4xl font-bold text-white">Soporte</h1>
         <p className="mt-3 text-gray-300">
           ¿Necesitas ayuda? Revisa las preguntas frecuentes o escríbenos a{" "}
-          <a href="mailto:soporte@synapmsg.ai" className="text-accent-light underline">
-            soporte@synapmsg.ai
+          <a href="mailto:administrador@toscanasystems.com" className="text-accent-light underline">
+            administrador@toscanasystems.com
           </a>
           .
         </p>
@@ -73,8 +73,8 @@ export default function SupportPage() {
             Toscana Systems, S.A.
             <br />
             Email:{" "}
-            <a href="mailto:soporte@synapmsg.ai" className="text-accent underline">
-              soporte@synapmsg.ai
+            <a href="mailto:administrador@toscanasystems.com" className="text-accent underline">
+              administrador@toscanasystems.com
             </a>
             <br />
             Privacidad:{" "}

@@ -46,6 +46,14 @@
             <p className="mt-2 text-gray-500 text-sm max-w-sm leading-relaxed">
               DIRECCION_FISCAL_PENDIENTE
             </p>
+            <p className="mt-2 text-sm max-w-sm leading-relaxed">
+              <a
+                href="mailto:administrador@toscanasystems.com"
+                className="text-gray-400 hover:text-accent-light underline-offset-2 hover:underline"
+              >
+                administrador@toscanasystems.com
+              </a>
+            </p>
             <a
               href="https://www.toscanasystems.com"
               target="_blank"
