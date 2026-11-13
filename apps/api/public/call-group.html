@@ -85,6 +85,12 @@
   let iceServers = [{ urls: 'stun:stun.cloudflare.com:3478' }];
   let iceTransportPolicy = 'relay';
   const allowDirectParam = params.get('allowDirect') === '1';
+  /** True after first successful WS+mic boot — later opens are network recovery. */
+  let meshStarted = false;
+  let recovering = false;
+  let recoveryWatchTimer = null;
+  /** peerId → last mesh_reset ms (debounce mutual recreate ping-pong). */
+  const lastMeshResetAt = new Map();
 
   /** @type {Map<string, { pc: RTCPeerConnection, pendingIce: any[], polite: boolean, makingOffer: boolean, audio: HTMLAudioElement, status: string, name: string, muted: boolean, iceRestarts: number }>} */
   const peers = new Map();
@@ -281,6 +287,7 @@
         entry.iceRestarts = 0;
         sendWs('call_peer_status', { status: 'connected' });
         renderRoster();
+        refreshConnectedStatus();
         void logPair(peerId);
       } else if (s === 'disconnected') {
         entry.status = 'disconnected';
@@ -361,6 +368,28 @@
     const entry = await ensurePeer(fromUserId);
     if (!entry) return;
 
+    if (signal.kind === 'mesh_reset') {
+      // Peer rebuilt their PC after network loss — mirror with a fresh edge.
+      const now = Date.now();
+      if (now - (lastMeshResetAt.get(fromUserId) || 0) < 5000) {
+        sendSignal(fromUserId, { kind: 'ready' });
+        if (!entry.polite) void makeOffer(fromUserId, false);
+        return;
+      }
+      lastMeshResetAt.set(fromUserId, now);
+      const name = entry.name;
+      const muted = entry.muted;
+      closePeer(fromUserId);
+      const fresh = await ensurePeer(fromUserId, name);
+      if (!fresh) return;
+      fresh.muted = muted;
+      fresh.status = 'joining';
+      sendSignal(fromUserId, { kind: 'ready' });
+      if (!fresh.polite) void makeOffer(fromUserId, false);
+      renderRoster();
+      return;
+    }
+
     if (signal.kind === 'ready') {
       // Late joiner / peer ready: non-polite side offers.
       if (!entry.polite) await makeOffer(fromUserId, false);
@@ -381,7 +410,12 @@
       const desc = signal.sdp;
       const offerCollision =
         desc.type === 'offer' && (entry.makingOffer || entry.pc.signalingState !== 'stable');
-      if (!entry.polite && offerCollision) return;
+      if (offerCollision) {
+        if (!entry.polite) return; // imperfect peer ignores colliding remote offer
+        try {
+          await entry.pc.setLocalDescription({ type: 'rollback' });
+        } catch (_) {}
+      }
       await entry.pc.setRemoteDescription(assertEncryptedSdp(desc));
       while (entry.pendingIce.length) {
         const c = entry.pendingIce.shift();
@@ -423,9 +457,22 @@
         entry.name = m.name || entry.name;
         entry.muted = !!m.muted;
         if (m.status === 'disconnected') entry.status = 'disconnected';
-        // Announce ready so edges form (late join: we offer if non-polite).
+        const ice = entry.pc.iceConnectionState;
+        const needRestart = ice === 'failed' || ice === 'disconnected' || ice === 'closed';
+        // Announce ready so edges form (late join / post-airplane ice-restart).
         sendSignal(m.userId, { kind: 'ready' });
-        if (!entry.polite) void makeOffer(m.userId, false);
+        if (needRestart) {
+          entry.iceRestarts = 0;
+          try {
+            if (typeof entry.pc.setConfiguration === 'function') {
+              entry.pc.setConfiguration({ iceServers, iceTransportPolicy, iceCandidatePoolSize: 4 });
+            }
+          } catch (_) {}
+          try { entry.pc.restartIce(); } catch (_) {}
+          void makeOffer(m.userId, true);
+        } else if (!entry.polite) {
+          void makeOffer(m.userId, false);
+        }
         renderRoster();
       })();
     });
@@ -436,10 +483,104 @@
     renderRoster();
   }
 
+  function refreshConnectedStatus() {
+    const linked = [...peers.values()].filter((p) => {
+      const s = p.pc.iceConnectionState;
+      return s === 'connected' || s === 'completed';
+    }).length;
+    if (linked > 0) {
+      setStatus('Conectado · relé · malla ' + linked + ' enlace(s)');
+      postNative({ type: 'connected', policy: iceTransportPolicy, group: true, peers: linked });
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * After airplane / WS drop: fresh TURN + recreate dead PeerConnections.
+   * iceRestart alone often stalls after total interface loss; new PCs + mesh_reset
+   * make both sides rebuild the edge.
+   */
+  async function recoverMeshAfterNetwork() {
+    if (hungUp || recovering) return;
+    recovering = true;
+    try {
+      setStatus('Sin conexión… reenganchando');
+      await loadIceFromConfig();
+      if (localStream) {
+        const live = localStream.getAudioTracks().some((t) => t.readyState === 'live');
+        if (!live) {
+          try { localStream.getTracks().forEach((t) => t.stop()); } catch (_) {}
+          localStream = null;
+        }
+      }
+      await ensureMedia();
+
+      const dead = [];
+      for (const [peerId, entry] of [...peers.entries()]) {
+        const ice = entry.pc.iceConnectionState;
+        if (ice === 'connected' || ice === 'completed') continue;
+        dead.push({ peerId, name: entry.name, muted: entry.muted });
+      }
+      const now = Date.now();
+      for (const d of dead) {
+        lastMeshResetAt.set(d.peerId, now);
+        closePeer(d.peerId);
+      }
+      for (const d of dead) {
+        const entry = await ensurePeer(d.peerId, d.name);
+        if (!entry) continue;
+        entry.muted = d.muted;
+        entry.status = 'joining';
+        sendSignal(d.peerId, { kind: 'mesh_reset' });
+        sendSignal(d.peerId, { kind: 'ready' });
+        if (!entry.polite) void makeOffer(d.peerId, false);
+      }
+
+      sendWs('call_peer_status', { status: 'joining' });
+      try {
+        const r = await fetch(apiBase.replace(/\/$/, '') + '/calls/roster/' + encodeURIComponent(chatId), {
+          headers: { Authorization: 'Bearer ' + token },
+        });
+        if (r.ok) {
+          const data = await r.json();
+          if (data.members) applyRoster(data.members);
+        }
+      } catch (_) {}
+
+      renderRoster();
+      if (!refreshConnectedStatus()) {
+        setStatus('Sin conexión… reenganchando');
+      }
+    } finally {
+      recovering = false;
+    }
+  }
+
+  function armRecoveryWatch() {
+    if (recoveryWatchTimer) clearTimeout(recoveryWatchTimer);
+    let n = 0;
+    const tick = () => {
+      if (hungUp) return;
+      if (refreshConnectedStatus()) return;
+      const dead = [...peers.values()].some((p) => {
+        const s = p.pc.iceConnectionState;
+        return s !== 'connected' && s !== 'completed';
+      });
+      if (!dead && peers.size === 0) return;
+      if (n++ >= 6) return;
+      void recoverMeshAfterNetwork().finally(() => {
+        recoveryWatchTimer = setTimeout(tick, 3500);
+      });
+    };
+    recoveryWatchTimer = setTimeout(tick, 1500);
+  }
+
   function leave() {
     if (hungUp) return;
     hungUp = true;
     if (wsRetryTimer) clearTimeout(wsRetryTimer);
+    if (recoveryWatchTimer) clearTimeout(recoveryWatchTimer);
     try { if (wakeLock) wakeLock.release(); } catch (_) {}
     try {
       if (ws && ws.readyState === 1) {
@@ -468,17 +609,24 @@
 
   function connectWs() {
     if (hungUp) return;
+    try { if (ws) { ws.onclose = null; ws.close(); } } catch (_) {}
     const url = wsBase + (wsBase.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(token);
     ws = new WebSocket(url);
     ws.onopen = async () => {
       wsRetry = 0;
       void holdWakeLock();
-      setStatus('Permisos de micrófono…');
       try {
+        if (meshStarted) {
+          // Network / airplane recovery — renegotiate dead mesh edges.
+          await recoverMeshAfterNetwork();
+          armRecoveryWatch();
+          postNative({ type: 'media-ok', video: false, group: true });
+          return;
+        }
+        setStatus('Permisos de micrófono…');
         await ensureMedia();
         setStatus('En malla · esperando participantes…');
         sendWs('call_peer_status', { status: 'joining' });
-        // Ask server roster via HTTP too
         try {
           const r = await fetch(apiBase.replace(/\/$/, '') + '/calls/roster/' + encodeURIComponent(chatId), {
             headers: { Authorization: 'Bearer ' + token },
@@ -488,6 +636,7 @@
             if (data.members) applyRoster(data.members);
           }
         } catch (_) {}
+        meshStarted = true;
         postNative({ type: 'media-ok', video: false, group: true });
       } catch (e) {
         const msg = (e && e.message) ? e.message : String(e);
@@ -516,6 +665,7 @@
         roster.delete(msg.fromUserId);
         renderRoster();
         setStatus('Alguien salió · la llamada sigue');
+        refreshConnectedStatus();
       }
       if (msg.type === 'call_mute' && msg.chatId === chatId && msg.fromUserId) {
         const entry = peers.get(msg.fromUserId);
@@ -536,11 +686,35 @@
       peers.forEach((p) => { p.status = 'disconnected'; });
       renderRoster();
       setStatus('Sin conexión… reenganchando');
-      sendWs('call_peer_status', { status: 'disconnected' });
-      const delay = Math.min(8000, 800 * Math.pow(1.6, wsRetry++));
+      const delay = Math.min(5000, 500 * Math.pow(1.5, wsRetry++));
+      if (wsRetryTimer) clearTimeout(wsRetryTimer);
       wsRetryTimer = setTimeout(connectWs, delay);
     };
   }
+
+  window.addEventListener('online', () => {
+    if (hungUp || !meshStarted) return;
+    if (!ws || ws.readyState !== 1) {
+      if (wsRetryTimer) clearTimeout(wsRetryTimer);
+      wsRetry = 0;
+      connectWs();
+    } else {
+      void recoverMeshAfterNetwork();
+      armRecoveryWatch();
+    }
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || hungUp || !meshStarted) return;
+    if (!refreshConnectedStatus()) {
+      if (!ws || ws.readyState !== 1) {
+        if (wsRetryTimer) clearTimeout(wsRetryTimer);
+        connectWs();
+      } else {
+        void recoverMeshAfterNetwork();
+      }
+    }
+  });
 
   (async function boot() {
     renderRoster();

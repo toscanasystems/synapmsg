@@ -3,6 +3,12 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-13 — Pieza 4 (llamada de voz en grupo)
+
+Llamada de voz en grupo, malla sin mezclador. Tres teléfonos reales: los tres se oyen, silencio y salida funcionan, y la dirección IP queda oculta tras el relé.
+
+Comprobado en MeshP4 (Samsung `R5CYA03YERH` 94-****-4160, Toscana `RFCX41A9NQL` 89-****-8750, empleada `R58Y811MFMX` 36-****-3284): a) 3 en llamada + malla 2 enlaces; b) Salir → «Alguien salió · la llamada sigue»; c) mic apagado; d) avión 10 s en Toscana → `Conectado · relé` en ~17 s (recreate PC + `mesh_reset` en `call-group.html`); e) UI `Conectado · relé` (sin IP del peer).
+
 ## 2026-11-13 — soporte@synapmsg.ai
 
 soporte@synapmsg.ai aún no recibe correo. No anunciar ese correo hasta activarlo.

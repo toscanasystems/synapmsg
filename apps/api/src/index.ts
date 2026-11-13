@@ -190,6 +190,9 @@ app.get('/call', (req: Request, res: Response) => {
     'Permissions-Policy',
     'camera=(self), microphone=(self), display-capture=(self)',
   );
+  // Call HTML must not stick in WebView cache — airplane rejoin depends on latest mesh JS.
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
   // Allow Jitsi iframe / WebRTC in WebView (helmet CORP can block third-party media).
   res.removeHeader('Cross-Origin-Resource-Policy');
   res.removeHeader('Cross-Origin-Embedder-Policy');
