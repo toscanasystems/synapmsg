@@ -26,4 +26,4 @@ Este archivo no duplica marketing. Si no está en `HECHO.md`, no está demostrad
 
 ## Bug bounty
 
-`docs/BUG_BOUNTY.md` · `support@synapmsg.ai` asunto `[SECURITY]`
+`docs/BUG_BOUNTY.md` · `administrador@toscanasystems.com` asunto `[SECURITY]`

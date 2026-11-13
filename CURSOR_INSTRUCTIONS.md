@@ -195,7 +195,7 @@ curl https://api.synapmsg.ai/health
 curl -X POST https://api.synapmsg.ai/auth/register \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "test@synapmsg.ai",
+    "email": "lab-test@example.invalid",
     "password": "test12345678",
     "name": "Test User",
     "username": "testuser",

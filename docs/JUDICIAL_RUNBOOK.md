@@ -15,11 +15,11 @@ Solo se actúa bajo **orden judicial estricta** válida en la jurisdicción apli
 - PIN / duress / recovery codes en claro
 
 ## Procedimiento
-1. Recibir oficio → legal@ / support@synapmsg.ai
+1. Recibir oficio → administrador@toscanasystems.com
 2. Validar autenticidad y alcance con asesoría legal
 3. Extraer solo campos cubiertos por la orden
 4. Registrar cadena de custodia (quién, cuándo, qué)
 5. Responder por el canal judicial indicado
 
 ## Contacto
-`support@synapmsg.ai` · asunto `[LEGAL]`
+`administrador@toscanasystems.com` · asunto `[LEGAL]`

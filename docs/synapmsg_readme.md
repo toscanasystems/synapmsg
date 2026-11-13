@@ -124,7 +124,7 @@ Reglas no negociables en [`SECURITY.md`](./SECURITY.md):
 - Chats **Privado E2E**: el servidor no ve plaintext.
 - Keys en enclave / store cifrado; nunca en logs ni repos.
 - Respuesta a autoridades **solo con orden judicial estricta** y metadata mínima.
-- Bug bounty: reportes a `support@synapmsg.ai` (política completa en SECURITY.md).
+- Bug bounty: reportes a `administrador@toscanasystems.com` (política completa en SECURITY.md).
 
 ## Roadmap 24 semanas
 

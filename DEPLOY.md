@@ -174,7 +174,7 @@ curl https://api.synapmsg.ai/health
 ```bash
 curl -X POST https://api.synapmsg.ai/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"test@synapmsg.ai","password":"test1234","name":"Test","username":"test","preferredLanguage":"es"}'
+  -d '{"email":"lab-test@example.invalid","password":"test1234","name":"Test","username":"test","preferredLanguage":"es"}'
 ```
 
 ## 🆘 Troubleshooting

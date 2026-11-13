@@ -23,5 +23,5 @@
 Program in soft launch: acknowledgment + swag / credit. Cash tiers TBD after AGPL public release.
 
 ## Report
-Email `support@synapmsg.ai` · subject `[SECURITY]` · include PoC, impact, affected version.
+Email `administrador@toscanasystems.com` · subject `[SECURITY]` · include PoC, impact, affected version.
 Safe Harbor for good-faith research that follows this policy.

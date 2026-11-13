@@ -37,24 +37,24 @@ y la dirección IP queda oculta tras el relé.
 
 Comprobado en MeshP4 (Samsung `R5CYA03YERH` 94-****-4160, Toscana `RFCX41A9NQL` 89-****-8750, empleada `R58Y811MFMX` 36-****-3284): a) 3 en llamada + malla 2 enlaces; b) Salir → «Alguien salió · la llamada sigue»; c) mic apagado; d) avión 10 s en Toscana → `Conectado · relé` en ~17 s; e) UI `Conectado · relé` (sin IP del peer).
 
-## 2026-11-13 — soporte@synapmsg.ai
+## 2026-11-13 — Correo de contacto público
 
-soporte@synapmsg.ai no se anuncia hasta que reciba.
+Un solo correo público en todo el producto: administrador@toscanasystems.com.
+No anunciar otras direcciones @synapmsg.ai hasta que Email Routing esté activo y probado.
 
-Contacto público actual: administrador@toscanasystems.com (landing, app y Toscana).
+Estado Cloudflare (wrangler, 2026-11-13 ~17:30 UTC-6):
+- Email Routing: `enabled=false`, `status=unconfigured`.
+- Destino `administrador@toscanasystems.com` aún no verificado en Cloudflare.
+- Un destino interno quedó **pending**; no usarlo como contacto público.
+- `wrangler email routing enable synapmsg.ai` falla: `Active zone required [code: 2009]`.
+- DNS público: NS Cloudflare; sin MX públicos todavía.
 
-Estado Cloudflare (wrangler, cuenta TOSCANA SYSTEMS S.A.):
-- Email Routing para `synapmsg.ai`: `enabled=false`, `status=unconfigured`.
-- Destino de reenvío previsto: `administrador@toscanasystems.com`.
-- `wrangler email routing enable synapmsg.ai` falló: `Active zone required [code: 2009]`.
-- DNS público: sin MX todavía (solo NS Cloudflare).
-
-Pasos exactos en el panel (cuando se reactive el buzón):
-1. Cloudflare Dashboard → dominio `synapmsg.ai` → **Email** → **Email Routing** → Enable.
-2. Destino verificado: `administrador@toscanasystems.com`.
-3. Dejar que Cloudflare agregue MX y SPF.
-4. **Routing rules** → Create address: `soporte@synapmsg.ai` → Action: Send to `administrador@toscanasystems.com` → Save.
-5. Probar recepción; si llega: borrar este aviso y recién entonces anunciar `soporte@synapmsg.ai`.
+Pasos del panel (cuando la zona esté Active):
+1. Dashboard → `synapmsg.ai` → Email → Email Routing → Get started / Enable.
+2. Dejar publicar MX/SPF/DKIM de Cloudflare.
+3. Destination addresses → verificar `administrador@toscanasystems.com`.
+4. Regla de ruteo interna (buzón del dominio → reenviar a administrador@). No publicar ese buzón en UI.
+5. Probar recepción; el contacto visible sigue siendo solo administrador@.
 
 ## 2026-11-13 — Mensajes por túnel Cloudflare (PASO 2 IP)
 
