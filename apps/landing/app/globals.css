@@ -17,6 +17,7 @@
 
 html {
   scroll-behavior: smooth;
+  background: #000000; /* evita flash blanco antes del body */
 }
 
 body {

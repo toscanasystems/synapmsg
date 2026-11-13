@@ -602,6 +602,11 @@ export function SettingsScreen(): JSX.Element {
         contentContainerStyle={{ paddingBottom: insets.bottom + spacing.xxxl }}
         keyboardShouldPersistTaps="handled"
       >
+        <Text style={styles.hint}>
+          Cuenta, seguridad, privacidad y plan. Las acciones rápidas (nuevo chat,
+          invitar, bots) están en la pestaña Herramientas.
+        </Text>
+
         {/* Perfil estilo WhatsApp */}
         <Pressable
           style={styles.profileCard}

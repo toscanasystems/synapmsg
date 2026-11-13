@@ -134,6 +134,11 @@ export function ToolsScreen(): JSX.Element {
           paddingHorizontal: spacing.xl,
         }}
       >
+        <Text style={styles.intro}>
+          Acciones rápidas. Cuenta, seguridad y plan viven en Ajustes (engranaje
+          arriba en Chats).
+        </Text>
+
         <Text style={styles.section}>Chat</Text>
         <ToolRow
           icon="edit-3"
@@ -271,6 +276,13 @@ const styles = themed((colors) => ({
     color: colors.textPrimary,
     fontSize: fontSize.xl,
     fontWeight: fontWeight.bold,
+  },
+  intro: {
+    color: colors.textMuted,
+    fontSize: fontSize.sm,
+    lineHeight: 20,
+    marginTop: spacing.sm,
+    marginBottom: spacing.md,
   },
   section: {
     color: colors.accent,

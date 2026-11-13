@@ -2,7 +2,7 @@
   "expo": {
     "name": "Synap",
     "slug": "synapmsg",
-    "version": "1.1.8",
+    "version": "1.1.9",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "synapmsg",
@@ -31,7 +31,7 @@
         "backgroundColor": "#000000"
       },
       "package": "com.synapmsg.app",
-      "versionCode": 78,
+      "versionCode": 82,
       "permissions": [
         "READ_CONTACTS",
         "CAMERA",
