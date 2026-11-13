@@ -2,11 +2,12 @@
  * Short-lived TURN credentials for WebRTC relay.
  *
  * Providers (in order):
- * 1) Cloudflare Realtime TURN (SYNAP_CF_TURN_KEY_ID + SYNAP_CF_TURN_API_TOKEN)
- * 2) coturn with use-auth-secret (SYNAP_TURN_URLS + SYNAP_TURN_SECRET)
- * 3) Static username/password TURN (SYNAP_TURN_URLS + USERNAME/CREDENTIAL)
+ * 1) coturn with use-auth-secret (SYNAP_TURN_URLS + SYNAP_TURN_SECRET) — preferred
+ * 2) Cloudflare Realtime TURN only if coturn is not configured
+ * 3) Static username/password TURN only if SYNAP_TURN_ALLOW_STATIC=1
  *
  * Relay forwards DTLS-SRTP ciphertext only — never plaintext audio.
+ * Default TTL: 10 minutes (600s).
  */
 
 import { createHmac, randomBytes } from 'crypto';
@@ -24,10 +25,11 @@ export type TurnMintResult = {
   ttlSec?: number;
 };
 
+/** Default credential lifetime: 10 minutes. */
 function ttlSecDefault(): number {
   return Math.min(
     172800,
-    Math.max(60, Number(process.env.SYNAP_TURN_TTL_SEC || 3600)),
+    Math.max(60, Number(process.env.SYNAP_TURN_TTL_SEC || 600)),
   );
 }
 
@@ -51,6 +53,26 @@ export async function mintTurnIceServers(opts?: {
   const ttlSec = opts?.ttlSec ?? ttlSecDefault();
   const allowDirect = opts?.allowDirect === true;
   const iceTransportPolicy: 'relay' | 'all' = allowDirect ? 'all' : 'relay';
+
+  const turnUrls = (process.env.SYNAP_TURN_URLS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const turnSecret = (process.env.SYNAP_TURN_SECRET || '').trim();
+
+  // Prefer own coturn HMAC — never ship fixed username/password in code.
+  if (turnUrls.length && turnSecret) {
+    const { username, credential } = mintCoturnHmac(turnSecret, ttlSec);
+    return {
+      iceServers: [
+        { urls: 'stun:stun.cloudflare.com:3478' },
+        { urls: turnUrls, username, credential },
+      ],
+      iceTransportPolicy,
+      provider: 'coturn-hmac',
+      ttlSec,
+    };
+  }
 
   const keyId = (process.env.SYNAP_CF_TURN_KEY_ID || '').trim();
   const cfToken = (
@@ -91,27 +113,10 @@ export async function mintTurnIceServers(opts?: {
     };
   }
 
-  const turnUrls = (process.env.SYNAP_TURN_URLS || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const turnSecret = (process.env.SYNAP_TURN_SECRET || '').trim();
-  if (turnUrls.length && turnSecret) {
-    const { username, credential } = mintCoturnHmac(turnSecret, ttlSec);
-    return {
-      iceServers: [
-        { urls: 'stun:stun.cloudflare.com:3478' },
-        { urls: turnUrls, username, credential },
-      ],
-      iceTransportPolicy,
-      provider: 'coturn-hmac',
-      ttlSec,
-    };
-  }
-
+  const allowStatic = process.env.SYNAP_TURN_ALLOW_STATIC === '1';
   const turnUser = process.env.SYNAP_TURN_USERNAME || '';
   const turnPass = process.env.SYNAP_TURN_CREDENTIAL || '';
-  if (turnUrls.length && turnUser && turnPass) {
+  if (allowStatic && turnUrls.length && turnUser && turnPass) {
     return {
       iceServers: [
         { urls: 'stun:stun.cloudflare.com:3478' },
