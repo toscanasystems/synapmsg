@@ -3,6 +3,24 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-13 — soporte@synapmsg.ai
+
+soporte@synapmsg.ai aún no recibe correo. No anunciar ese correo hasta activarlo.
+
+Estado Cloudflare (wrangler, cuenta TOSCANA SYSTEMS S.A.):
+- Email Routing para `synapmsg.ai`: `enabled=false`, `status=unconfigured`.
+- Destino `juan.giordano@toscanasystems.com` creado (`pending` verificación).
+- `wrangler email routing enable synapmsg.ai` falló: `Active zone required [code: 2009]`.
+- DNS público: sin MX todavía (solo NS Cloudflare).
+
+Pasos exactos en el panel (lo que tiene que tocar el usuario):
+1. Abrir el correo de `juan.giordano@toscanasystems.com` y confirmar el enlace de Cloudflare (“Verify email address”) del destino de Email Routing.
+2. Cloudflare Dashboard → dominio `synapmsg.ai` → **Email** → **Email Routing** → **Get started** / Enable.
+3. Dejar que Cloudflare agregue y bloquee los MX (`route1/2/3.mx.cloudflare.net`) y el SPF TXT.
+4. **Routing rules** → Create address: `soporte@synapmsg.ai` → Action: Send to `juan.giordano@toscanasystems.com` → Save.
+5. Enviar un correo de prueba a `soporte@synapmsg.ai` desde otra cuenta y confirmar llegada (y spam).
+6. Cuando llegue: borrar este aviso de HECHO y recién entonces anunciar el correo en marketing.
+
 ## 2026-11-12 — Metadata de mensajes e IP del remitente
 
 El servidor no guarda la IP del remitente en la fila del mensaje ni en los registros.
