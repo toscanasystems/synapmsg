@@ -5,22 +5,24 @@ Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
 ## 2026-11-13 — Recuperación de cuenta con código de 12 caracteres
 
-### Demostrado (API local `127.0.0.1:3000` + Samsung SM-A566E)
+Recuperación de cuenta sin correo, con código de 12 caracteres.
+Probado en producción: mismo número, mensaje genérico en el fallo, y límite de intentos.
+
+### Demostrado
 
 1. **Huella en base, nunca el código.** Alta/bootstrap guarda solo `accountRecoveryHash` argon2id; consulta de prueba con `plaintext_in_row: false`.
-2. **Código de una sola vez en el teléfono.** Samsung: pantalla «Tu código de recuperación» (p. ej. `8E92-9ELY-QUN2`); «Ya lo apunté» confirma; aviso en Ajustes si se aplaza; el aviso desaparece tras confirmar.
-3. **Landing `/recuperar`.** Página con campo de 12 caracteres, aviso claro de que las conversaciones anteriores no se recuperan, número conservado automáticamente. Pie + Ajustes enlazan a `synapmsg.ai/recuperar`.
-4. **`POST /auth/recover` (pruebas a–d, script `_fase4_recover_proof.js`):**
-   - (a) código correcto → 200, mismo número (`69-0030-2579`), `loginTicket` + token.
-   - (b) código inventado → 400 genérico, sin revelar si existe.
-   - (c) 6 intentos/IP/min → el 6.º es **429** (`retryAfterSec` creciente).
-   - (d) tras recuperar: `device_identities` del teléfono perdido = 0; bundle peer **404**; pushToken limpio. El número sigue en `private_number_ledger` (no reasignable).
+2. **Código de una sola vez en el teléfono.** Samsung: pantalla «Tu código de recuperación»; «Ya lo apunté» confirma; aviso en Ajustes si se aplaza; el aviso desaparece tras confirmar.
+3. **Landing `/recuperar`.** Desplegada en Cloudflare Pages (`synapmsg.ai/recuperar`). Campo de 12 caracteres; aviso de que las conversaciones anteriores no se recuperan; número conservado.
+4. **Producción `api.synapmsg.ai` (lab bootstrap `30-2692-8219`):**
+   - (a) código correcto → 200, mismo número `30-2692-8219`, `loginTicket`.
+   - (b) inventado → 400 genérico (`No se pudo recuperar con ese código…`), sin filtrar existencia.
+   - (c) 6 intentos/IP/min → el 6.º es **429** (`rate_limited`).
+   - (d, lab local previo) tras recuperar: `device_identities=0`, bundle peer **404**.
 
 Conversaciones viejas: no se restauran (cifradas en el aparato perdido).
 
 ### Todavía no
 
-- Despliegue de esta ruta en `api.synapmsg.ai` / Cloudflare Pages (sin push a GitHub en esta tanda).
 - Flujo completo web→app nueva con `loginTicket` cableado en la UI de login.
 
 ## 2026-11-13 — Pieza 4 (llamada de voz en grupo)
