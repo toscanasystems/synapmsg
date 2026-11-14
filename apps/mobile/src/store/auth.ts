@@ -50,6 +50,7 @@ interface AuthState {
   clearError: () => void;
   setUser: (user: User) => void;
   clearPendingRecoveryCode: () => Promise<void>;
+  setPendingRecoveryCode: (recoveryCode: string) => Promise<void>;
 }
 
 // Register the 401 handler ONCE at module load time. Zustand store
@@ -300,6 +301,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   clearPendingRecoveryCode: async () => {
     await AsyncStorage.removeItem(STORAGE_KEYS.PENDING_RECOVERY_CODE);
     set({ pendingRecoveryCode: null });
+  },
+
+  setPendingRecoveryCode: async (recoveryCode: string) => {
+    await AsyncStorage.setItem(
+      STORAGE_KEYS.PENDING_RECOVERY_CODE,
+      recoveryCode,
+    );
+    set({ pendingRecoveryCode: recoveryCode });
   },
 
   adoptSession: async (token, user) => {

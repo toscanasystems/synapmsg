@@ -494,4 +494,5 @@ export const STORAGE_KEYS = {
   USER: '@synapmsg/user',
   ONBOARDED: '@synapmsg/onboarded',
   PENDING_RECOVERY_CODE: '@synapmsg/pending_recovery_code_v1',
+  RECOVERY_CONFIRMED_AT: '@synapmsg/recovery_confirmed_at_v1',
 } as const;

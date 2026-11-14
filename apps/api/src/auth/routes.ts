@@ -650,6 +650,33 @@ router.post(
 );
 
 /**
+ * POST /auth/recovery/rotate
+ * Issues a NEW 12-char code (plaintext once). Old paper code becomes useless.
+ * Hash-only on server; confirmed → false until user confirms again.
+ */
+router.post(
+  '/recovery/rotate',
+  authMiddleware,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const recoveryCode = generateRecoveryCode();
+      const accountRecoveryHash = await hashRecoveryCode(recoveryCode);
+      const user = await prisma.user.update({
+        where: { id: req.user!.id },
+        data: {
+          accountRecoveryHash,
+          accountRecoveryCreatedAt: new Date(),
+          accountRecoveryConfirmed: false,
+        },
+      });
+      res.json({ user: serializeUser(user), recoveryCode });
+    } catch (err) {
+      next(err);
+    }
+  },
+);
+
+/**
  * POST /auth/recover
  * Body: { code } — 12-char recovery passphrase.
  * Looks up by argon2 verify (hash only in DB). Always same error on miss.

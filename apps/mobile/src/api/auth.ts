@@ -64,6 +64,12 @@ export const authApi = {
     const { data } = await apiClient.get<MeResponse>('/auth/me');
     return data;
   },
+
+  /** New 12-char code; old paper code stops working. Plaintext once. */
+  async rotateRecoveryCode(): Promise<AuthResponse> {
+    const { data } = await apiClient.post<AuthResponse>('/auth/recovery/rotate');
+    return data;
+  },
 };
 
 export default authApi;

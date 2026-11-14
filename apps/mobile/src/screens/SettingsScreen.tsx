@@ -31,10 +31,12 @@ import { useAuthStore } from '../store/auth';
 import { useAppLockStore } from '../store/appLock';
 import { useThemeStore, type ThemeMode } from '../store/theme';
 import { usersApi } from '../api/messages';
+import { authApi } from '../api/auth';
 import {
   LANGUAGES,
   LanguageCode,
   RootStackParamList,
+  STORAGE_KEYS,
   TranslateMode,
 } from '../types';
 import { UserAvatar } from '../components/UserAvatar';
@@ -150,6 +152,7 @@ export function SettingsScreen(): JSX.Element {
   const logout = useAuthStore((s) => s.logout);
   const setUser = useAuthStore((s) => s.setUser);
   const pendingRecoveryCode = useAuthStore((s) => s.pendingRecoveryCode);
+  const setPendingRecoveryCode = useAuthStore((s) => s.setPendingRecoveryCode);
   const themeMode = useThemeStore((s) => s.mode);
   const setThemeMode = useThemeStore((s) => s.setMode);
 
@@ -177,6 +180,9 @@ export function SettingsScreen(): JSX.Element {
   const [e2eDeviceCount, setE2eDeviceCount] = useState(0);
   const [deviceRisk, setDeviceRisk] = useState<DeviceRisk | null>(null);
   const [vpnOn, setVpnOn] = useState(false);
+  const [recoveryConfirmedAt, setRecoveryConfirmedAt] = useState<string | null>(
+    null,
+  );
   const [whisperReady, setWhisperReady] = useState(false);
   const [identityLog, setIdentityLog] = useState<IdentityChangeLogEntry[]>(
     [],
@@ -205,14 +211,51 @@ export function SettingsScreen(): JSX.Element {
 
   useEffect(() => {
     void (async () => {
-      const [n, r] = await Promise.all([
+      const [n, r, confirmedAt] = await Promise.all([
         AsyncStorage.getItem(NOTIF_KEY),
         AsyncStorage.getItem(READ_KEY),
+        AsyncStorage.getItem(STORAGE_KEYS.RECOVERY_CONFIRMED_AT),
       ]);
       if (n != null) setNotificationsOn(n === '1');
       if (r != null) setReadReceipts(r === '1');
+      if (confirmedAt) setRecoveryConfirmedAt(confirmedAt);
     })();
   }, []);
+
+  const rotateRecoveryWithWarning = useCallback(
+    (buttonLabel: string) => {
+      Alert.alert(
+        'Código nuevo',
+        'Se va a crear un código nuevo. El papel anterior ya no sirve.',
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          {
+            text: buttonLabel,
+            style: 'destructive',
+            onPress: () => {
+              void (async () => {
+                try {
+                  const res = await authApi.rotateRecoveryCode();
+                  if (res.user) setUser(res.user);
+                  await AsyncStorage.removeItem(
+                    STORAGE_KEYS.RECOVERY_CONFIRMED_AT,
+                  );
+                  setRecoveryConfirmedAt(null);
+                  if (res.recoveryCode) {
+                    await setPendingRecoveryCode(res.recoveryCode);
+                    navigation.navigate('RecoveryCode');
+                  }
+                } catch {
+                  Alert.alert('Error', 'No se pudo crear un código nuevo.');
+                }
+              })();
+            },
+          },
+        ],
+      );
+    },
+    [navigation, setPendingRecoveryCode, setUser],
+  );
 
   const refreshPlan = useCallback(async () => {
     try {
@@ -616,21 +659,18 @@ export function SettingsScreen(): JSX.Element {
                 navigation.navigate('RecoveryCode');
                 return;
               }
-              Alert.alert(
-                'Código de recuperación',
-                'Apuntá el código que te mostramos al crear la cuenta. Sin ese código no podés recuperar tu cuenta si perdés el teléfono.',
-              );
+              rotateRecoveryWithWarning('Crear código nuevo');
             }}
           >
             <Feather name="alert-triangle" size={20} color="#fff" />
             <View style={styles.recoveryBannerText}>
               <Text style={styles.recoveryBannerTitle}>
-                Apuntá tu código de recuperación
+                Todavía no apuntaste tu código
               </Text>
               <Text style={styles.recoveryBannerSub}>
                 {pendingRecoveryCode
-                  ? 'Todavía no confirmaste. Tocá aquí para verlo de nuevo.'
-                  : 'Sin confirmar. Si lo perdiste, no hay otra copia.'}
+                  ? 'Tocá aquí para verlo de nuevo y apuntarlo en papel.'
+                  : 'Tocá aquí para crear un código nuevo (el anterior ya no vale).'}
               </Text>
             </View>
             <Feather name="chevron-right" size={18} color="#fff" />
@@ -712,6 +752,35 @@ export function SettingsScreen(): JSX.Element {
             <SettingsRow
               icon="key"
               iconBg="#C45C26"
+              title="Código de recuperación"
+              subtitle={
+                user.accountRecoveryConfirmed
+                  ? `Guardado. Apuntado en papel el ${
+                      recoveryConfirmedAt
+                        ? new Date(recoveryConfirmedAt).toLocaleDateString(
+                            'es-GT',
+                          )
+                        : '—'
+                    }.`
+                  : pendingRecoveryCode
+                    ? 'Pendiente: apuntá el código en papel'
+                    : 'Todavía no apuntaste tu código'
+              }
+              onPress={() => {
+                if (pendingRecoveryCode) {
+                  navigation.navigate('RecoveryCode');
+                  return;
+                }
+                rotateRecoveryWithWarning(
+                  user.accountRecoveryConfirmed
+                    ? 'No lo tengo apuntado'
+                    : 'Crear código nuevo',
+                );
+              }}
+            />
+            <SettingsRow
+              icon="globe"
+              iconBg="#8B5A2B"
               title="Recuperar cuenta (web)"
               subtitle="Si perdés el teléfono: synapmsg.ai/recuperar con tu código"
               onPress={() =>
@@ -723,7 +792,7 @@ export function SettingsScreen(): JSX.Element {
               <SettingsRow
                 icon="mail"
                 iconBg="#107090"
-                title="Agregar correo para recibir avisos"
+                title="Agregar correo para avisos"
                 subtitle="No sirve para recuperar la cuenta. Para eso está tu código de 12 caracteres."
                 onPress={() => {
                   setEmailDraft('');
@@ -738,6 +807,35 @@ export function SettingsScreen(): JSX.Element {
             <SettingsRow
               icon="key"
               iconBg="#C45C26"
+              title="Código de recuperación"
+              subtitle={
+                user.accountRecoveryConfirmed
+                  ? `Guardado. Apuntado en papel el ${
+                      recoveryConfirmedAt
+                        ? new Date(recoveryConfirmedAt).toLocaleDateString(
+                            'es-GT',
+                          )
+                        : '—'
+                    }.`
+                  : pendingRecoveryCode
+                    ? 'Pendiente: apuntá el código en papel'
+                    : 'Todavía no apuntaste tu código'
+              }
+              onPress={() => {
+                if (pendingRecoveryCode) {
+                  navigation.navigate('RecoveryCode');
+                  return;
+                }
+                rotateRecoveryWithWarning(
+                  user.accountRecoveryConfirmed
+                    ? 'No lo tengo apuntado'
+                    : 'Crear código nuevo',
+                );
+              }}
+            />
+            <SettingsRow
+              icon="globe"
+              iconBg="#8B5A2B"
               title="Recuperar cuenta (web)"
               subtitle="Si perdés el teléfono: synapmsg.ai/recuperar con tu código"
               onPress={() =>
@@ -749,7 +847,7 @@ export function SettingsScreen(): JSX.Element {
               <SettingsRow
                 icon="mail"
                 iconBg="#107090"
-                title="Agregar correo para recibir avisos"
+                title="Agregar correo para avisos"
                 subtitle="No sirve para recuperar la cuenta. Para eso está tu código de 12 caracteres."
                 onPress={() => {
                   setEmailDraft('');
@@ -1943,7 +2041,7 @@ export function SettingsScreen(): JSX.Element {
             onPress={(e) => e.stopPropagation()}
           >
             <Text style={styles.modalTitle}>
-              Agregar correo para recibir avisos
+              Agregar correo para avisos
             </Text>
             <Text style={{ color: colors.textSecondary, marginBottom: spacing.md }}>
               No sirve para recuperar la cuenta. Para eso está tu código de 12

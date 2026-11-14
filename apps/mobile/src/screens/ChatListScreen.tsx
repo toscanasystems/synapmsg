@@ -4,7 +4,7 @@
  * eating taps on some Samsung devices.
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -57,6 +57,7 @@ export function ChatListScreen(): JSX.Element {
     useNavigation<NativeStackNavigationProp<RootStackParamList, 'ChatList'>>();
 
   const me = useAuthStore((s) => s.user);
+  const pendingRecoveryCode = useAuthStore((s) => s.pendingRecoveryCode);
   const chats = useChatsStore((s) => s.chats);
   const unreadByChat = useChatsStore((s) => s.unreadByChat);
   const isLoading = useChatsStore((s) => s.isLoading);
@@ -74,6 +75,13 @@ export function ChatListScreen(): JSX.Element {
   const [showHidden, setShowHidden] = useState(false);
   const [pinOpen, setPinOpen] = useState(false);
   const [pinDraft, setPinDraft] = useState('');
+
+  // After signup/rotate: show code screen on top of ChatList so hardware back works.
+  useEffect(() => {
+    if (pendingRecoveryCode) {
+      navigation.navigate('RecoveryCode');
+    }
+  }, [pendingRecoveryCode, navigation]);
 
   const { activeChats, archivedChats, hiddenChats } = useMemo(() => {
     const hidden = chats.filter((c) => hiddenIds.includes(c.id));
