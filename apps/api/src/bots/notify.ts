@@ -72,5 +72,11 @@ export async function enqueueBotUpdatesForMessage(opts: {
         isE2e: opts.isE2e,
       }),
     )
-    .catch(() => undefined);
+    .catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error(
+        '[support-bot] auto-reply failed:',
+        err instanceof Error ? err.message : 'unknown',
+      );
+    });
 }
