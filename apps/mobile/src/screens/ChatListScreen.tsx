@@ -57,6 +57,8 @@ export function ChatListScreen(): JSX.Element {
     useNavigation<NativeStackNavigationProp<RootStackParamList, 'ChatList'>>();
 
   const me = useAuthStore((s) => s.user);
+  const sessionOffline = useAuthStore((s) => s.sessionOffline);
+  const retrySession = useAuthStore((s) => s.retrySession);
   const pendingRecoveryCode = useAuthStore((s) => s.pendingRecoveryCode);
   const chats = useChatsStore((s) => s.chats);
   const unreadByChat = useChatsStore((s) => s.unreadByChat);
@@ -161,7 +163,34 @@ export function ChatListScreen(): JSX.Element {
 
   return (
     <View style={styles.container} collapsable={false}>
-      <View style={[styles.header, { paddingTop: insets.top + spacing.md }]}>
+      {sessionOffline ? (
+        <View
+          style={[
+            styles.offlineBanner,
+            { paddingTop: insets.top + spacing.sm },
+          ]}
+        >
+          <Text style={styles.offlineText}>Sin conexión con el servidor</Text>
+          <Pressable
+            onPress={() => {
+              void retrySession();
+            }}
+            style={styles.offlineBtn}
+          >
+            <Text style={styles.offlineBtnLabel}>Reintentar</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: sessionOffline
+              ? spacing.md
+              : insets.top + spacing.md,
+          },
+        ]}
+      >
         <View style={styles.brandRow}>
           <Image
             source={require('../../assets/logo.png')}
@@ -577,6 +606,34 @@ const styles = themed((colors) => ({
     color: colors.textInverse,
     fontWeight: fontWeight.semibold,
     fontSize: fontSize.body,
+  },
+  offlineBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.sm,
+    backgroundColor: colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  offlineText: {
+    flex: 1,
+    color: colors.warning ?? '#F5A623',
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.semibold,
+  },
+  offlineBtn: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  offlineBtnLabel: {
+    color: '#000',
+    fontSize: fontSize.caption,
+    fontWeight: fontWeight.semibold,
   },
   header: {
     flexDirection: 'row',

@@ -70,10 +70,15 @@ export async function applyTrafficTunnel(_on: boolean): Promise<void> {
   }
 }
 
-/** Hydrate routing at app start — messaging always via media.synapmsg.ai/tunnel. */
+/**
+ * Hydrate routing at app start.
+ * Prefer DIRECT for auth/bootstrap reliability. If the user previously
+ * enabled anti-censorship, re-apply the Cloudflare tunnel after hydrate.
+ */
 export async function hydrateVpnRouting(): Promise<boolean> {
-  setApiBaseUrl(true);
-  return true;
+  const preferTunnel = await isVpnPreferred();
+  setApiBaseUrl(preferTunnel);
+  return preferTunnel;
 }
 
 /** Open WireGuard import or Outline add-server deep link when possible. */

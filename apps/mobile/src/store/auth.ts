@@ -36,6 +36,8 @@ interface AuthState {
   isLoading: boolean;
   isHydrated: boolean;
   error: string | null;
+  /** Session kept locally but /auth/me failed due to network. */
+  sessionOffline: boolean;
   /** One-time recovery passphrase waiting for "Ya lo apunté". */
   pendingRecoveryCode: string | null;
 
@@ -44,8 +46,10 @@ interface AuthState {
   login: (payload: LoginRequest) => Promise<void>;
   register: (payload: RegisterRequest) => Promise<void>;
   bootstrap: (preferredLanguage?: string) => Promise<void>;
+  recoverWithCode: (code: string) => Promise<void>;
   completeRecoveryLogin: (loginTicket: string, code: string) => Promise<void>;
   adoptSession: (token: string, user: User) => Promise<void>;
+  retrySession: () => Promise<void>;
   logout: () => Promise<void>;
   clearError: () => void;
   setUser: (user: User) => void;
@@ -64,6 +68,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   isLoading: false,
   isHydrated: false,
   error: null,
+  sessionOffline: false,
   pendingRecoveryCode: null,
 
   hydrate: async () => {
@@ -106,21 +111,54 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (token) {
         setAuthToken(token);
         const user = userJson ? (JSON.parse(userJson) as User) : null;
-        set({ token, user, isHydrated: true, pendingRecoveryCode });
+        set({
+          token,
+          user,
+          isHydrated: true,
+          pendingRecoveryCode,
+          sessionOffline: false,
+        });
 
         // Best-effort refresh of the user profile (token may be stale).
         try {
           const { user: fresh } = await authApi.me();
           await setAuthSession(token, JSON.stringify(fresh));
-          set({ user: fresh });
+          set({ user: fresh, sessionOffline: false });
           wsManager.connect(token);
           return;
-        } catch {
-          // Dead/stale token → clear and auto-login so the user is never stuck.
-          setAuthToken(null);
-          await clearAuthSession();
-          set({ token: null, user: null });
-          await tryAutoLogin();
+        } catch (err) {
+          // Network blip → keep local session so the user is not kicked to Bootstrap.
+          const status =
+            err && typeof err === 'object' && 'status' in err
+              ? Number((err as { status?: number }).status)
+              : undefined;
+          const msg = String(
+            err && typeof err === 'object' && 'message' in err
+              ? (err as { message?: string }).message
+              : err ?? '',
+          ).toLowerCase();
+          const isNetwork =
+            status === 0 ||
+            /network|timeout|econnaborted|network request failed/.test(msg);
+          if (isNetwork) {
+            set({ sessionOffline: true });
+            try {
+              wsManager.connect(token);
+            } catch {
+              /* best-effort */
+            }
+            return;
+          }
+          // Real auth rejection (401/403) → clear and fall through.
+          if (status === 401 || status === 403) {
+            setAuthToken(null);
+            await clearAuthSession();
+            set({ token: null, user: null, sessionOffline: false });
+            await tryAutoLogin();
+            return;
+          }
+          // Unknown error: keep session offline rather than wipe the account.
+          set({ sessionOffline: true });
           return;
         }
       }
@@ -279,6 +317,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         user,
         isLoading: false,
         error: null,
+        sessionOffline: false,
         pendingRecoveryCode: recoveryCode ?? null,
       });
       try {
@@ -295,6 +334,90 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const message = mapAuthError(err);
       set({ isLoading: false, error: message });
       throw err;
+    }
+  },
+
+  recoverWithCode: async (code: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const { token, user } = await authApi.recover(code);
+      // Prior phone / prior account Signal material must not ride into the
+      // recovered session (server already wiped device pubs on recover).
+      try {
+        const { wipeSignalLocalSecrets } = await import(
+          '../crypto/signalSession'
+        );
+        await wipeSignalLocalSecrets();
+      } catch {
+        /* best-effort */
+      }
+      await setAuthSession(token, JSON.stringify(user));
+      setAuthToken(token);
+      set({
+        token,
+        user,
+        isLoading: false,
+        error: null,
+        sessionOffline: false,
+        pendingRecoveryCode: null,
+      });
+      try {
+        wsManager.connect(token);
+      } catch {
+        /* best-effort */
+      }
+      // Re-publish a fresh Signal bundle so Privado chats can send again.
+      try {
+        const { ensureSignalBundle } = await import('../crypto/signalSession');
+        const { usersApi } = await import('../api/messages');
+        const bundle = await ensureSignalBundle();
+        await usersApi.registerE2eDevice({
+          deviceId: bundle.deviceId,
+          identityKeyPub: bundle.identityKeyPub,
+          signedPreKeyPub: bundle.signedPreKeyPub,
+          signedPreKeyId: bundle.signedPreKeyId,
+          signedPreKeySig: bundle.signedPreKeySig,
+          registrationId: bundle.registrationId,
+          preKeys: bundle.preKeys,
+          protocol: bundle.protocol,
+        });
+      } catch {
+        /* user can re-register from Ajustes */
+      }
+    } catch (err) {
+      const message = mapAuthError(err);
+      set({ isLoading: false, error: message });
+      throw err;
+    }
+  },
+
+  retrySession: async () => {
+    const { token } = get();
+    if (!token) return;
+    set({ isLoading: true, error: null });
+    try {
+      setAuthToken(token);
+      const { user: fresh } = await authApi.me();
+      await setAuthSession(token, JSON.stringify(fresh));
+      set({ user: fresh, sessionOffline: false, isLoading: false });
+      wsManager.connect(token);
+    } catch (err) {
+      const status =
+        err && typeof err === 'object' && 'status' in err
+          ? Number((err as { status?: number }).status)
+          : undefined;
+      if (status === 401 || status === 403) {
+        setAuthToken(null);
+        await clearAuthSession();
+        set({
+          token: null,
+          user: null,
+          sessionOffline: false,
+          isLoading: false,
+        });
+        return;
+      }
+      set({ sessionOffline: true, isLoading: false });
     }
   },
 

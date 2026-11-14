@@ -24,13 +24,12 @@ export const TUNNEL_API_BASE_URL = 'https://media.synapmsg.ai/tunnel';
 
 /**
  * Mutable base URL for messaging HTTP.
- * Default = tunnel so Railway does not see the phone IP on send/receive.
- * Local/dev EXPO_PUBLIC_API_URL skips the tunnel (points straight at that host).
+ * Start on DIRECT so login/bootstrap always reach api.synapmsg.ai.
+ * Tunnel (media.synapmsg.ai) is applied after session when the user enables
+ * anti-censorship routing — never block first open if the tunnel path fails.
  * Call WebView stays on DIRECT_API_BASE_URL (see CallScreen).
  */
-export let API_BASE_URL: string = ENV_API_URL
-  ? DIRECT_API_BASE_URL
-  : TUNNEL_API_BASE_URL;
+export let API_BASE_URL: string = DIRECT_API_BASE_URL;
 
 export function isTunnelActive(): boolean {
   return API_BASE_URL.startsWith(TUNNEL_API_BASE_URL);
@@ -57,8 +56,8 @@ export function setApiBaseUrl(useTunnel: boolean): void {
  * keeps using DIRECT_API_BASE_URL in CallScreen (unchanged call path).
  */
 export function buildWsUrl(token: string): string {
-  const httpBase = ENV_API_URL ? DIRECT_API_BASE_URL : TUNNEL_API_BASE_URL;
-  const base = httpBase.replace(/^http/, 'ws');
+  // Match the active HTTP base (direct or tunnel).
+  const base = API_BASE_URL.replace(/^http/, 'ws');
   const sep = base.endsWith('/') ? '' : '/';
   return `${base}${sep}ws?token=${encodeURIComponent(token)}`;
 }

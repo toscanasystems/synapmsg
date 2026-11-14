@@ -14,7 +14,9 @@ export function mapAuthError(err: unknown): string {
       .toLowerCase();
 
     if (err.status === 0 || /network|timeout|econnaborted/.test(raw)) {
-      return 'No hay conexión con el servidor. Revisá tu internet e intentá de nuevo.';
+      const detail =
+        err.message && err.message.length < 80 ? ` (${err.message})` : '';
+      return `No hay conexión con el servidor. Revisá tu internet e intentá de nuevo.${detail}`;
     }
 
     if (
