@@ -88,3 +88,7 @@ apps/mobile/android/app/debug.keystore
 apps/turn/.turn_secret.local
 apps/api/_turn_*.json
 
+# Private local notes (locations only — never passwords)
+*.PRIVATE.md
+**/*.PRIVATE.md
+

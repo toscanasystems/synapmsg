@@ -29,7 +29,8 @@ export async function findSupportBot(): Promise<{
     where: { username: SUPPORT_BOT_USERNAME },
     select: { id: true, botUserId: true, token: true },
   });
-  return bot;
+  if (!bot) return null;
+  return { botId: bot.id, botUserId: bot.botUserId, token: bot.token };
 }
 
 function newTicketId(): string {
