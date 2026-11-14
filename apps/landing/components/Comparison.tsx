@@ -60,9 +60,11 @@ const ROWS: Row[] = [
   },
 ];
 
-type SixRow = {
+/** Order: Synap · Threema · Session · Zangi · Signal · Telegram · WhatsApp */
+type SevenRow = {
   feature: string;
   synap: string;
+  threema: string;
   session: string;
   zangi: string;
   signal: string;
@@ -70,10 +72,12 @@ type SixRow = {
   whatsapp: string;
 };
 
-const SIX_ROWS: SixRow[] = [
+const SEVEN_ROWS: SevenRow[] = [
   {
     feature: "Cifrado por defecto",
-    synap: "Sí, en chats de 2 y grupos, con la librería de Signal",
+    synap:
+      "Sí en chats de 2 (probados en teléfonos). Grupos: cifrado demostrado en script; sin prueba de chat en tres teléfonos",
+    threema: "Sí, no se puede apagar",
     session: "Sí, protocolo propio sobre libsodium",
     zangi: "AES-256 propio (cerrado)",
     signal: "Sí, no se puede apagar",
@@ -83,6 +87,7 @@ const SIX_ROWS: SixRow[] = [
   {
     feature: "Código abierto",
     synap: "Repositorio visible. Licencia propietaria",
+    threema: "Apps sí (AGPL); servidor no del todo",
     session: "Sí, app y servidor",
     zangi: "No",
     signal: "Sí, app y servidor",
@@ -92,6 +97,7 @@ const SIX_ROWS: SixRow[] = [
   {
     feature: "Auditoría de terceros",
     synap: "No todavía",
+    threema: "Sí",
     session: "Sí, Quarkslab revisó los clientes",
     zangi: "Sin auditoría pública conocida",
     signal: "Sí",
@@ -101,6 +107,7 @@ const SIX_ROWS: SixRow[] = [
   {
     feature: "IP oculta en los mensajes",
     synap: "No todavía",
+    threema: "No",
     session: "Sí, enrutado en capas",
     zangi: "Dicen que sí, sin comprobar",
     signal: "No",
@@ -110,6 +117,7 @@ const SIX_ROWS: SixRow[] = [
   {
     feature: "IP oculta en las llamadas",
     synap: "Sí, tras el relé. Probado entre dos redes",
+    threema: "Opcional y apagado por defecto. En grupo, la IP se ve",
     session: "No. Ellos avisan que la IP se comparte",
     zangi: "Dicen que sí",
     signal: "No",
@@ -119,6 +127,7 @@ const SIX_ROWS: SixRow[] = [
   {
     feature: "Alta sin teléfono ni correo",
     synap: "Sí, número propio de 10 dígitos",
+    threema: "Sí, Threema ID",
     session: "Sí, código de cuenta",
     zangi: "Sí, número de 10 dígitos",
     signal: "No en la app normal",
@@ -128,6 +137,7 @@ const SIX_ROWS: SixRow[] = [
   {
     feature: "Traducción dentro de la app",
     synap: "En el teléfono: inglés a español, probado. En la nube: 12 idiomas",
+    threema: "No",
     session: "No",
     zangi: "No",
     signal: "No",
@@ -136,7 +146,8 @@ const SIX_ROWS: SixRow[] = [
   },
   {
     feature: "Traducir sin que el texto salga del teléfono",
-    synap: "Sí, en chat Privado",
+    synap: "Sí, en chat Privado; probado inglés a español",
+    threema: "No",
     session: "No",
     zangi: "No",
     signal: "No",
@@ -146,6 +157,7 @@ const SIX_ROWS: SixRow[] = [
   {
     feature: "El servidor puede leer tus mensajes",
     synap: "En Privado no. En Nube sí, y lo avisa",
+    threema: "No",
     session: "No, y tampoco sabe quién eres",
     zangi: "Dicen que no",
     signal: "No",
@@ -155,6 +167,7 @@ const SIX_ROWS: SixRow[] = [
   {
     feature: "PIN de coacción y borrado remoto",
     synap: "Sí, probado entre dos teléfonos",
+    threema: "PIN sí; sin ese paquete",
     session: "No",
     zangi: "Sí, en Premium",
     signal: "No como paquete",
@@ -164,6 +177,7 @@ const SIX_ROWS: SixRow[] = [
   {
     feature: "Llamadas de voz y video",
     synap: "Voz y video, con la IP oculta tras el relé",
+    threema: "Voz y video",
     session: "Sí, en beta",
     zangi: "Sí",
     signal: "Hasta 30",
@@ -173,6 +187,7 @@ const SIX_ROWS: SixRow[] = [
   {
     feature: "Llamada en grupo",
     synap: "Hasta 8, probada con 3 teléfonos",
+    threema: "Hasta 16 (Private)",
     session: "Sí, en beta",
     zangi: "Hasta 1.000 en conferencia",
     signal: "Hasta 30",
@@ -182,6 +197,7 @@ const SIX_ROWS: SixRow[] = [
   {
     feature: "Grupos",
     synap: "Hasta 8 en llamada; chat de grupo cifrado",
+    threema: "Sí",
     session: "100",
     zangi: "1.000 en conferencia",
     signal: "Sobre 1.000",
@@ -191,6 +207,7 @@ const SIX_ROWS: SixRow[] = [
   {
     feature: "Archivos",
     synap: "25 MB, cifrados",
+    threema: "Hasta 50 MB",
     session: "10 MB",
     zangi: "Tamaño original con Premium",
     signal: "200 MB",
@@ -269,7 +286,7 @@ export function Comparison() {
         <div className="mx-auto max-w-6xl px-6">
           <div className="max-w-3xl mb-10 pt-16">
             <h2 className="font-serif text-3xl md:text-4xl font-bold text-white mb-3">
-              Seis apps, una fila a la vez
+              Siete apps, una fila a la vez
             </h2>
             <p className="text-base text-gray-300 leading-relaxed">
               Synap solo con lo demostrado. Las demás, con lo que publican hoy.
@@ -277,7 +294,7 @@ export function Comparison() {
           </div>
 
           <div className="overflow-x-auto rounded-2xl border border-white/10">
-            <table className="min-w-[1100px] w-full text-left text-sm">
+            <table className="min-w-[1280px] w-full text-left text-sm">
               <thead>
                 <tr className="bg-surface text-gray-300">
                   <th className="px-4 py-4 font-medium sticky left-0 bg-surface z-10 min-w-[140px]">
@@ -289,6 +306,7 @@ export function Comparison() {
                       en desarrollo
                     </span>
                   </th>
+                  <th className="px-4 py-4 font-medium min-w-[180px]">Threema</th>
                   <th className="px-4 py-4 font-medium min-w-[160px]">Session</th>
                   <th className="px-4 py-4 font-medium min-w-[160px]">Zangi</th>
                   <th className="px-4 py-4 font-medium min-w-[160px]">Signal</th>
@@ -297,13 +315,16 @@ export function Comparison() {
                 </tr>
               </thead>
               <tbody>
-                {SIX_ROWS.map((row) => (
+                {SEVEN_ROWS.map((row) => (
                   <tr key={row.feature} className="border-t border-white/10 align-top">
                     <td className="px-4 py-4 text-white font-medium sticky left-0 bg-primary z-10">
                       {row.feature}
                     </td>
                     <td className={`px-4 py-4 bg-accent/10 ${cellTone(row.synap)}`}>
                       {row.synap}
+                    </td>
+                    <td className={`px-4 py-4 ${cellTone(row.threema)}`}>
+                      {row.threema}
                     </td>
                     <td className={`px-4 py-4 ${cellTone(row.session)}`}>
                       {row.session}
@@ -327,8 +348,9 @@ export function Comparison() {
           </div>
 
           <p className="mt-6 text-sm text-gray-500 max-w-4xl">
-            Datos de las otras apps: fuentes públicas, 13 de noviembre de 2026.
+            Datos de las otras apps: fuentes públicas, 14 de noviembre de 2026.
             La columna de Synap solo incluye lo demostrado en docs/HECHO.md.
+            Orden: Synap · Threema · Session · Zangi · Signal · Telegram · WhatsApp.
           </p>
         </div>
       </section>
