@@ -2,10 +2,10 @@
   {
     id: "free",
     name: "Gratis",
-    price: "$0",
+    price: "US$0",
     period: "/ mes",
     blurb: "Chat Privado y cuenta sin SIM.",
-    cta: "Descargar Android",
+    cta: "Descargar APK Android",
     href: "https://media.synapmsg.ai/downloads/synap-android.apk",
     featured: false,
     features: [
@@ -16,9 +16,9 @@
     ],
   },
   {
-    id: "premium",
-    name: "Premium",
-    price: "$4.99",
+    id: "premium-month",
+    name: "Premium mensual",
+    price: "US$19.99",
     period: "/ mes",
     blurb: "Más cuota de media. El modo Privado no se vende aparte.",
     cta: "Activar en la app",
@@ -27,15 +27,43 @@
     features: [
       "Todo lo del plan Gratis",
       "Más almacenamiento de media",
-      "Sin anuncios (objetivo de producto)",
-      "Pago con Recurrente cuando esté configurado",
+      "Sin anuncios en Premium",
+      "Pago cuando el cobro esté configurado en la app",
+    ],
+  },
+  {
+    id: "premium-1y",
+    name: "Premium 1 año",
+    price: "US$200",
+    period: "/ año",
+    blurb: "Mismo Premium, cobrado por un año.",
+    cta: "Activar en la app",
+    href: "#empezar",
+    featured: false,
+    features: [
+      "Todo lo del plan Premium",
+      "Un solo cobro anual",
+    ],
+  },
+  {
+    id: "premium-2y",
+    name: "Premium 2 años",
+    price: "US$350",
+    period: "/ 2 años",
+    blurb: "Mismo Premium, cobrado por dos años.",
+    cta: "Activar en la app",
+    href: "#empezar",
+    featured: false,
+    features: [
+      "Todo lo del plan Premium",
+      "Un solo cobro cada dos años",
     ],
   },
 ];
 
 export function Pricing() {
   return (
-    <section id="planes" className="bg-primary-soft py-24">
+    <section id="planes" className="bg-primary-soft py-24 scroll-mt-24">
       <div className="mx-auto max-w-6xl px-6">
         <div className="mx-auto max-w-3xl text-center mb-16">
           <span className="inline-block rounded-full bg-accent/20 px-4 py-1.5 text-sm font-medium text-accent-light mb-4">

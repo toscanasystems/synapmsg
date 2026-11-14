@@ -29,8 +29,8 @@ const STEPS = [
     n: "3",
     title: "Escribe: se cifra en tu teléfono antes de salir",
     lines: [
-      "El servidor guarda un paquete que no puede leer.",
-      "Y si quieres, traduce sin que el texto salga.",
+      "En Privado el servidor guarda un paquete que no puede leer.",
+      "Traducción en Privado: en el teléfono (probado inglés ↔ español).",
     ],
     Illu: IlluEncryptBeforeServer,
   },
@@ -64,8 +64,7 @@ export function Hero() {
           En un chat Privado, el mensaje se cifra en tu teléfono y el servidor solo guarda
           un paquete que no puede leer. Nuestro servidor no ve desde dónde escribes. Si
           eliges un chat Nube, el servidor sí puede leerlo, y la app te avisa antes de
-          crearlo. La traducción en un chat Privado ocurre en tu teléfono: el texto no sale
-          de ahí.
+          crearlo. En Privado la traducción ocurre en tu teléfono (probado inglés ↔ español).
         </p>
 
         <ol className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3 animate-slide-up">
@@ -95,18 +94,26 @@ export function Hero() {
           ))}
         </ol>
 
-        <div className="mt-10 flex flex-wrap gap-3 animate-slide-up">
+        <div className="mt-10 flex flex-col items-start gap-3 animate-slide-up">
+          <div className="flex flex-wrap gap-3">
+            <a
+              href="https://media.synapmsg.ai/downloads/synap-android.apk"
+              className="rounded-xl bg-accent px-7 py-3.5 font-semibold text-black hover:bg-accent/90 transition-colors"
+            >
+              Descargar APK Android
+            </a>
+            <a
+              href="/recuperar/"
+              className="rounded-xl bg-accent px-7 py-3.5 font-semibold text-black hover:bg-accent/90 transition-colors"
+            >
+              Recuperar mi número
+            </a>
+          </div>
           <a
-            href="https://media.synapmsg.ai/downloads/synap-android.apk"
-            className="rounded-xl bg-accent px-7 py-3.5 font-semibold text-black hover:bg-accent/90 transition-colors"
-          >
-            Descargar Android
-          </a>
-          <a
-            href="#demostrado"
+            href="/windows/"
             className="rounded-xl border border-white/20 bg-white/5 px-7 py-3.5 font-semibold text-white hover:border-accent/50 transition-colors"
           >
-            Qué está demostrado
+            Windows: muy pronto
           </a>
         </div>
       </div>

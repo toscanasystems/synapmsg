@@ -39,7 +39,7 @@ const TODAVIA_NO = [
 ];
 export function SecurityExplained() {
   return (
-    <section id="demostrado" className="bg-primary-soft py-24 border-t border-white/5">
+    <section id="demostrado" className="bg-primary-soft py-24 border-t border-white/5 scroll-mt-24">
       <div className="mx-auto max-w-6xl px-6">
         <div className="max-w-3xl mb-14">
           <p className="text-accent-light text-sm font-medium uppercase tracking-wider mb-3">

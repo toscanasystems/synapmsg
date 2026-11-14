@@ -17,8 +17,8 @@ const CARDS = [
     Illu: IlluPrivateOrCloud,
   },
   {
-    title: "Traduce sin que el texto salga de tu teléfono",
-    body: "En un chat Privado la traducción ocurre en tu aparato. Probado con la red cortada. Ni Signal, ni Telegram, ni WhatsApp, ni Zangi lo hacen.",
+    title: "Traduce en el teléfono (Privado)",
+    body: "En un chat Privado la traducción ocurre en tu aparato. Probado inglés ↔ español con la red cortada. La traducción en la nube (12 idiomas) es solo para chats Nube.",
     Illu: IlluTranslateOnDevice,
   },
   {
