@@ -468,6 +468,7 @@ export type RootStackParamList = {
   Onboarding: undefined;
   Login: undefined;
   Register: undefined;
+  RecoverAccount: undefined;
   RecoveryCode: undefined;
   ChatList: undefined;
   Chat: { chatId: string; contactName?: string; contactLanguage?: string };

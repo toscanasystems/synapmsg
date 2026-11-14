@@ -86,11 +86,18 @@ export function LoginScreen(): JSX.Element {
       error={error}
       onDismissError={clearMessages}
       footer={
-        <AuthLinkRow
-          prompt="¿No tenés cuenta?"
-          action="Crear una"
-          onPress={() => navigation.replace('Register')}
-        />
+        <>
+          <AuthLinkRow
+            prompt="¿Perdiste el teléfono?"
+            action="Recuperar con código"
+            onPress={() => navigation.navigate('RecoverAccount')}
+          />
+          <AuthLinkRow
+            prompt="¿No tenés cuenta?"
+            action="Crear una"
+            onPress={() => navigation.replace('Register')}
+          />
+        </>
       }
     >
       <AuthField

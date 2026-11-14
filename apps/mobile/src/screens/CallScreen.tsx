@@ -14,6 +14,7 @@ import {
   Platform,
   Alert,
   PermissionsAndroid,
+  BackHandler,
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -154,6 +155,14 @@ export function CallScreen(): JSX.Element {
     if (ringTimeoutRef.current) clearTimeout(ringTimeoutRef.current);
     if (navigation.canGoBack()) navigation.goBack();
   }, [chatId, isGroup, navigation]);
+
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      hangUp();
+      return true;
+    });
+    return () => sub.remove();
+  }, [hangUp]);
 
   const enterCall = useCallback(() => {
     void stopRingtone();

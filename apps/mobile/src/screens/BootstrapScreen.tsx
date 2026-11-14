@@ -1,9 +1,9 @@
 /**
- * First open without a session: create anonymous account (server Private Number).
- * Email is optional later in Settings.
+ * First open without a session.
+ * Never auto-creates an account — that wiped real users onto a new number.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -22,7 +22,6 @@ export function BootstrapScreen(): JSX.Element {
   const bootstrap = useAuthStore((s) => s.bootstrap);
   const isLoading = useAuthStore((s) => s.isLoading);
   const [error, setError] = useState<string | null>(null);
-  const started = useRef(false);
 
   const runBootstrap = useCallback(async () => {
     setError(null);
@@ -32,13 +31,6 @@ export function BootstrapScreen(): JSX.Element {
       setError(mapAuthError(err));
     }
   }, [bootstrap]);
-
-  // Create the account on first open — no email/phone form.
-  useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-    void runBootstrap();
-  }, [runBootstrap]);
 
   return (
     <View
@@ -55,14 +47,14 @@ export function BootstrapScreen(): JSX.Element {
       <View style={styles.warningBox}>
         <Feather name="alert-triangle" size={22} color={colors.warning ?? '#F5A623'} />
         <Text style={styles.warningText}>
-          Apuntá tu código de 12 caracteres en papel. Es la única forma de
-          recuperar tu cuenta.
+          Si ya tenías cuenta, no crees otra. Recuperá con tu código de 12
+          caracteres del papel — es la única forma de volver al mismo número.
         </Text>
       </View>
 
       <Text style={styles.hint}>
-        Te asignamos un número de 10 dígitos para que te encuentren. No es un
-        teléfono ni una SIM.
+        Cuenta nueva: te asignamos un número de 10 dígitos. No es un teléfono ni
+        una SIM.
       </Text>
 
       {isLoading ? (
@@ -72,19 +64,25 @@ export function BootstrapScreen(): JSX.Element {
         </View>
       ) : null}
 
-      {error ? (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{error}</Text>
-          <Pressable
-            style={({ pressed }) => [styles.retryBtn, pressed && styles.pressed]}
-            onPress={() => {
-              void runBootstrap();
-            }}
-          >
-            <Text style={styles.retryLabel}>Reintentar</Text>
-          </Pressable>
-        </View>
-      ) : null}
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+      <Pressable
+        style={({ pressed }) => [styles.primaryBtn, pressed && styles.pressed]}
+        disabled={isLoading}
+        onPress={() => navigation.navigate('RecoverAccount')}
+      >
+        <Text style={styles.primaryLabel}>Recuperar con mi código</Text>
+      </Pressable>
+
+      <Pressable
+        style={({ pressed }) => [styles.secondaryBtn, pressed && styles.pressed]}
+        disabled={isLoading}
+        onPress={() => {
+          void runBootstrap();
+        }}
+      >
+        <Text style={styles.secondaryLabel}>Crear cuenta nueva</Text>
+      </Pressable>
 
       <View style={styles.footer}>
         <Pressable
@@ -92,7 +90,7 @@ export function BootstrapScreen(): JSX.Element {
           hitSlop={8}
           style={({ pressed }) => pressed && styles.pressed}
         >
-          <Text style={styles.link}>Ya tengo correo — entrar</Text>
+          <Text style={styles.link}>Ya tengo cuenta — entrar</Text>
         </Pressable>
       </View>
     </View>
@@ -138,29 +136,40 @@ const styles = themed((colors) => ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+    marginBottom: spacing.md,
   },
   loadingText: {
     color: colors.textSecondary,
     fontSize: fontSize.sm,
   },
-  errorBox: {
-    marginTop: spacing.lg,
-    gap: spacing.md,
-  },
   errorText: {
     color: colors.error,
     fontSize: fontSize.sm,
+    marginBottom: spacing.md,
   },
-  retryBtn: {
-    alignSelf: 'flex-start',
+  primaryBtn: {
     backgroundColor: colors.accent,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.md,
   },
-  retryLabel: {
-    color: '#fff',
+  primaryLabel: {
+    color: '#000',
     fontWeight: fontWeight.semibold,
+    fontSize: fontSize.md,
+  },
+  secondaryBtn: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  secondaryLabel: {
+    color: colors.textPrimary,
+    fontWeight: fontWeight.semibold,
+    fontSize: fontSize.md,
   },
   footer: {
     marginTop: 'auto',

@@ -70,6 +70,17 @@ export const authApi = {
     const { data } = await apiClient.post<AuthResponse>('/auth/recovery/rotate');
     return data;
   },
+
+  /**
+   * Recover lost phone with the 12-char paper code.
+   * Returns token + same privateNumber (server wipes old device keys).
+   */
+  async recover(code: string): Promise<AuthResponse> {
+    const { data } = await apiClient.post<AuthResponse>('/auth/recover', {
+      code,
+    });
+    return data;
+  },
 };
 
 export default authApi;

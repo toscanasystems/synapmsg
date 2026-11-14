@@ -18,6 +18,7 @@ import {
   Share,
   ScrollView,
   TextInput,
+  BackHandler,
   type AppStateStatus,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -537,6 +538,14 @@ export function SettingsScreen(): JSX.Element {
     else navigation.navigate('ChatList');
   }, [navigation]);
 
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      handleBack();
+      return true;
+    });
+    return () => sub.remove();
+  }, [handleBack]);
+
   const handleSelectLang = useCallback(
     async (code: LanguageCode) => {
       setPickerOpen(false);
@@ -782,10 +791,8 @@ export function SettingsScreen(): JSX.Element {
               icon="globe"
               iconBg="#8B5A2B"
               title="Recuperar cuenta (web)"
-              subtitle="Si perdés el teléfono: synapmsg.ai/recuperar con tu código"
-              onPress={() =>
-                void Linking.openURL('https://synapmsg.ai/recuperar')
-              }
+              subtitle="Si perdés el teléfono: usá el código de 12 caracteres"
+              onPress={() => navigation.navigate('RecoverAccount')}
               last={Boolean(user.email)}
             />
             {!user.email ? (
@@ -837,10 +844,8 @@ export function SettingsScreen(): JSX.Element {
               icon="globe"
               iconBg="#8B5A2B"
               title="Recuperar cuenta (web)"
-              subtitle="Si perdés el teléfono: synapmsg.ai/recuperar con tu código"
-              onPress={() =>
-                void Linking.openURL('https://synapmsg.ai/recuperar')
-              }
+              subtitle="Si perdés el teléfono: usá el código de 12 caracteres"
+              onPress={() => navigation.navigate('RecoverAccount')}
               last={Boolean(user.email)}
             />
             {!user.email ? (

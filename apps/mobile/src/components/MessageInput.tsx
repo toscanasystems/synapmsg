@@ -12,6 +12,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import colors, { themed } from '../theme/colors';
 import { fontSize, fontWeight, radius, spacing } from '../theme/spacing';
@@ -44,6 +45,7 @@ export function MessageInput({
   viewOnce = false,
   onToggleViewOnce,
 }: MessageInputProps): JSX.Element {
+  const insets = useSafeAreaInsets();
   const [text, setText] = useState('');
   const [attachOpen, setAttachOpen] = useState(false);
 
@@ -131,7 +133,16 @@ export function MessageInput({
           </Pressable>
         </View>
       ) : null}
-      <View style={styles.container}>
+      <View
+        style={[
+          styles.container,
+          {
+            paddingBottom:
+              (Platform.OS === 'ios' ? spacing.md : spacing.md) +
+              Math.max(insets.bottom, 0),
+          },
+        ]}
+      >
         <Pressable
           onPress={() => setAttachOpen(true)}
           disabled={disabled}

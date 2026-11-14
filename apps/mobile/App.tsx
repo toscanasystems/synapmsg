@@ -14,6 +14,7 @@ import {
   Appearance,
   Linking,
   Alert,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
@@ -39,6 +40,7 @@ import wsManager from './src/api/websocket';
 import { AppLockGate } from './src/components/AppLockGate';
 
 import { BootstrapScreen } from './src/screens/BootstrapScreen';
+import { RecoverAccountScreen } from './src/screens/RecoverAccountScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { RegisterScreen } from './src/screens/RegisterScreen';
@@ -98,6 +100,7 @@ function RootNavigator(): JSX.Element {
         <>
           <Stack.Screen name="ChatList" component={ChatListScreen} />
           <Stack.Screen name="RecoveryCode" component={RecoveryCodeScreen} />
+          <Stack.Screen name="RecoverAccount" component={RecoverAccountScreen} />
           <Stack.Screen name="Chat" component={ChatScreen} />
           <Stack.Screen name="NewChat" component={NewChatScreen} />
           <Stack.Screen name="NewGroup" component={NewGroupScreen} />
@@ -109,6 +112,7 @@ function RootNavigator(): JSX.Element {
       ) : (
         <>
           <Stack.Screen name="Bootstrap" component={BootstrapScreen} />
+          <Stack.Screen name="RecoverAccount" component={RecoverAccountScreen} />
           <Stack.Screen name="Login" component={LoginScreen} />
           <Stack.Screen name="Register" component={RegisterScreen} />
           <Stack.Screen name="Onboarding" component={OnboardingScreen} />
@@ -159,9 +163,121 @@ export default function App(): JSX.Element {
   }, [syncSystemTheme]);
 
   // Fase 4 prove + FIDO2 return: synapmsg://prove/phase4… · synapmsg://auth/fido2?token=
+  // Account recover (paper / one-shot): synapmsg://recover?code=XXXX-XXXX-XXXX
   useEffect(() => {
     const run = (url: string | null) => {
       if (!url) return;
+      if (url.startsWith('synapmsg://recover')) {
+        void (async () => {
+          try {
+            const q = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
+            const params = new URLSearchParams(q);
+            const code = (params.get('code') || '').replace(/[\s\-]/g, '');
+            if (code.length !== 12) return;
+            for (let i = 0; i < 40; i++) {
+              if (useAuthStore.getState().isHydrated) break;
+              await new Promise((r) => setTimeout(r, 250));
+            }
+            await useAuthStore.getState().recoverWithCode(code);
+          } catch (err) {
+            Alert.alert(
+              'Recuperar',
+              err instanceof Error ? err.message : 'No se pudo recuperar la cuenta',
+            );
+          }
+        })();
+        return;
+      }
+      // Dev/ops E2E send (path form — avoids shell eating '&' in query):
+      //   synapmsg://send/8953998750/Hola_mundo
+      //   synapmsg://send/_/Hola_mundo   → activeChatId
+      if (url.startsWith('synapmsg://send')) {
+        void (async () => {
+          try {
+            const path = url
+              .replace(/^synapmsg:\/\/send\/?/i, '')
+              .split('?')[0];
+            const parts = path.split('/').map((p) => {
+              try {
+                return decodeURIComponent(p);
+              } catch {
+                return p;
+              }
+            });
+            const toPN = (parts[0] && parts[0] !== '_' ? parts[0] : '').replace(
+              /\D/g,
+              '',
+            );
+            const text = (parts.slice(1).join('/') || '').trim();
+            if (!text) {
+              Alert.alert('Enviar', 'Falta texto en el enlace.');
+              return;
+            }
+            for (let i = 0; i < 40; i++) {
+              if (useAuthStore.getState().isHydrated && useAuthStore.getState().token)
+                break;
+              await new Promise((r) => setTimeout(r, 250));
+            }
+            if (!useAuthStore.getState().token) {
+              Alert.alert('Enviar', 'Sin sesión.');
+              return;
+            }
+            await useChatsStore.getState().fetchChats();
+            const me = useAuthStore.getState().user?.id;
+            const activeId = useChatsStore.getState().activeChatId;
+            let chat =
+              toPN.length >= 8
+                ? useChatsStore.getState().chats.find((c) => {
+                    if (c.type !== 'single') return false;
+                    const other = c.participants.find((p) => p.userId !== me)
+                      ?.user;
+                    const pn = (
+                      other?.privateNumber ||
+                      other?.privateNumberFormatted ||
+                      other?.name ||
+                      ''
+                    ).replace(/\D/g, '');
+                    return pn === toPN || pn.endsWith(toPN) || toPN.endsWith(pn);
+                  })
+                : undefined;
+            if (!chat && activeId) {
+              chat = useChatsStore.getState().chats.find((c) => c.id === activeId);
+            }
+            if (!chat) {
+              Alert.alert('Enviar', 'No hay chat destino (toPN / chat abierto).');
+              return;
+            }
+            // Ensure Signal pubs exist server-side (needed after recover).
+            try {
+              const { ensureSignalBundle } = await import(
+                './src/crypto/signalSession'
+              );
+              const { usersApi } = await import('./src/api/messages');
+              const bundle = await ensureSignalBundle();
+              await usersApi.registerE2eDevice({
+                deviceId: bundle.deviceId,
+                identityKeyPub: bundle.identityKeyPub,
+                signedPreKeyPub: bundle.signedPreKeyPub,
+                signedPreKeyId: bundle.signedPreKeyId,
+                signedPreKeySig: bundle.signedPreKeySig,
+                registrationId: bundle.registrationId,
+                preKeys: bundle.preKeys,
+                protocol: bundle.protocol,
+              });
+            } catch {
+              /* sendMessage will surface encrypt errors */
+            }
+            await useChatsStore.getState().sendMessage(chat.id, text);
+            navRef.current?.navigate('Chat', { chatId: chat.id });
+          } catch (err) {
+            Alert.alert(
+              'Enviar',
+              err instanceof Error ? err.message : 'No se pudo enviar',
+            );
+          }
+        })();
+        return;
+      }
       if (url.startsWith('synapmsg://auth/fido2')) {
         void (async () => {
           try {
@@ -458,6 +574,24 @@ export default function App(): JSX.Element {
     const sub = Linking.addEventListener('url', ({ url }) => onUrl(url));
     return () => sub.remove();
   }, [token, user, setUser]);
+
+  // Hardware back: pop stack screens; only leave the app from ChatList/Bootstrap.
+  useEffect(() => {
+    const onHardwareBack = () => {
+      const nav = navRef.current;
+      if (nav?.canGoBack()) {
+        nav.goBack();
+        return true;
+      }
+      // Root screen → MainActivity.moveTaskToBack (do not finish).
+      return false;
+    };
+    const sub = BackHandler.addEventListener(
+      'hardwareBackPress',
+      onHardwareBack,
+    );
+    return () => sub.remove();
+  }, []);
 
   const navTheme = {
     ...DefaultTheme,
