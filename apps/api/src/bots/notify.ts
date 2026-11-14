@@ -61,4 +61,16 @@ export async function enqueueBotUpdatesForMessage(opts: {
       }).catch(() => undefined);
     }
   }
+
+  // Official support bot: written FAQ reply (no AI). Best-effort; never throws.
+  void import('./supportReply')
+    .then((m) =>
+      m.maybeAutoReplySupportBot({
+        chatId: opts.chatId,
+        senderId: opts.senderId,
+        text: opts.text,
+        isE2e: opts.isE2e,
+      }),
+    )
+    .catch(() => undefined);
 }

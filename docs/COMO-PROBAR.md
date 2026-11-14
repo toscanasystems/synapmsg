@@ -50,6 +50,14 @@ con el código de 12 caracteres.
 
 Prueba API rápida (dev): `node apps/api/scripts/_fase4_recover_proof.js` con API en `:3000`.
 
+## 2c. Bot de soporte (FAQ escrita)
+
+1. Seed (una vez): `node apps/api/scripts/seed-support-bot.js` → `@soporte_bot` + PN nuevo.
+2. Unit: `npx tsx --test apps/api/src/__tests__/supportFaq.test.ts`
+3. Prueba de 5 preguntas: `node apps/api/scripts/p4-support-bot-prove.js`
+   (correo no recupera · precios · rechazo de claims prohibidos · unknown → ticket).
+4. En el teléfono: buscar `@soporte_bot` o el PN del bot; el chat con bots va en **Nube**.
+
 ## 3. Mensajes 1:1 (dos teléfonos)
 
 Dispositivos de laboratorio habituales:

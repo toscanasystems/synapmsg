@@ -178,6 +178,14 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       return;
     }
 
+    // Bots only receive plaintext in cloud chats (E2E skips bot notify).
+    const peerIsBot = Boolean(
+      await prisma.bot.findFirst({
+        where: { botUserId: participantId },
+        select: { id: true },
+      }),
+    );
+
     // Reuse an existing single chat with exactly these two participants.
     const existing = await prisma.chat.findFirst({
       where: {
@@ -196,11 +204,18 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
     let isNew = false;
     if (existing) {
       chatId = existing.id;
+      if (peerIsBot && existing.encryptionMode !== 'cloud') {
+        await prisma.chat.update({
+          where: { id: chatId },
+          data: { encryptionMode: 'cloud' },
+        });
+      }
     } else {
       // Create the chat and both participants in a transaction
       const created = await prisma.chat.create({
         data: {
           type: 'single',
+          encryptionMode: peerIsBot ? 'cloud' : 'e2e',
           participants: {
             create: [
               { userId: req.user!.id, role: 'admin' },

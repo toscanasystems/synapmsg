@@ -173,17 +173,27 @@ router.post('/', authMiddleware, async (req: Request, res: Response, next: NextF
     const token = newBotToken();
     const passwordHash = await argon2.hash(crypto.randomBytes(32).toString('hex'));
     const email = `bot+${crypto.randomBytes(8).toString('hex')}@bots.synapmsg.internal`;
+    const { allocatePrivateNumber, formatPrivateNumber } = await import(
+      '../lib/privateNumber'
+    );
+    const privateNumber = await allocatePrivateNumber();
 
     const bot = await prisma.$transaction(async (tx) => {
       const botUser = await tx.user.create({
         data: {
           email,
           username,
-          name,
+          name: name || formatPrivateNumber(privateNumber),
           passwordHash,
-          preferredLanguage: 'en',
+          privateNumber,
+          privateNumberShared: true,
+          preferredLanguage: 'es',
           preferredTranslateMode: 'cloud',
         },
+      });
+      await tx.privateNumberLedger.updateMany({
+        where: { privateNumber, firstUserId: null },
+        data: { firstUserId: botUser.id },
       });
       return tx.bot.create({
         data: {
@@ -196,6 +206,11 @@ router.post('/', authMiddleware, async (req: Request, res: Response, next: NextF
       });
     });
 
+    const botUser = await prisma.user.findUnique({
+      where: { id: bot.botUserId },
+      select: { privateNumber: true },
+    });
+
     res.status(201).json({
       bot: {
         id: bot.id,
@@ -203,6 +218,10 @@ router.post('/', authMiddleware, async (req: Request, res: Response, next: NextF
         name: bot.name,
         token: bot.token,
         botUserId: bot.botUserId,
+        privateNumber: botUser?.privateNumber ?? null,
+        privateNumberFormatted: botUser?.privateNumber
+          ? formatPrivateNumber(botUser.privateNumber)
+          : null,
       },
       hint: 'Guarda el token. Se usa en /bots/:token/sendMessage y getUpdates.',
     });

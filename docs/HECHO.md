@@ -3,6 +3,22 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-13 — Bot de soporte (respuestas escritas)
+
+Bot `@soporte_bot` con número privado propio `50-8557-4955` (no es el 89).
+Solo responde desde `apps/api/src/bots/supportFaq.md` (sin IA). No lee otros chats:
+solo el mensaje entrante en su chat Nube.
+
+Prueba (5 preguntas, Samsung 53 → bot, 2026-11-13 UTC-6):
+1. «¿Cómo creo una cuenta?» → FAQ `crear_cuenta`
+2. «¿Puedo recuperar con el correo?» → FAQ `correo_no_recupera`
+3. «¿Cuáles son los precios de Premium?» → 19,99 / 200 / 350
+4. «¿Es la más segura del mundo?» → rechazo (lista prohibida)
+5. «¿Cuál es la latencia del satélite lunar?» → ticket / humano
+   (`administrador@toscanasystems.com`; mail sin cuerpo del chat)
+
+Unit tests: `apps/api/src/__tests__/supportFaq.test.ts` (5/5).
+
 ## 2026-11-13 — Traducción en la nube (12 idiomas)
 
 Traducción en la nube: 12 idiomas probados uno por uno en el chat Nube.
