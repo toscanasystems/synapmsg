@@ -18,5 +18,7 @@ COPY prisma ./prisma
 RUN npm install --omit=dev && npx prisma generate
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/public ./public
+# FAQ source for support bot (read at runtime from dist/bots/)
+COPY src/bots/supportFaq.md ./dist/bots/supportFaq.md
 EXPOSE 3000
 CMD ["sh", "-c", "npx prisma db push --skip-generate && node dist/index.js"]
