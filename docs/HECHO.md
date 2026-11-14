@@ -3,6 +3,15 @@
 Solo entra aquí lo que una prueba automática o manual reproducible ya comprobó.
 Fecha en UTC-6 (Guatemala). Fuente de verdad para landing, README y comparativa.
 
+## 2026-11-13 — Traducción en la nube (12 idiomas)
+
+Traducción en la nube: 12 idiomas probados uno por uno en el chat Nube.
+
+Fuente: `Hola, ¿cómo estás hoy?` (es) → cada destino vía el mismo servicio DeepL/fallback
+que usa el chat Nube (`apps/api` `translation/service`). Comprobado 2026-11-13 UTC-6:
+es (idéntico), en, pt, fr, it, de, zh, ja, ko, ar, ru, hi — los 12 devolvieron texto
+correcto en el idioma pedido.
+
 ## 2026-11-13 — Recuperación de cuenta con código de 12 caracteres
 
 Recuperación de cuenta sin correo, con código de 12 caracteres.
