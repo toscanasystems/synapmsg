@@ -170,7 +170,7 @@ export function ChatListScreen(): JSX.Element {
             { paddingTop: insets.top + spacing.sm },
           ]}
         >
-          <Text style={styles.offlineText}>Sin conexión con el servidor</Text>
+          <Text style={styles.offlineText}>No hay conexión con el servidor</Text>
           <Pressable
             onPress={() => {
               void retrySession();

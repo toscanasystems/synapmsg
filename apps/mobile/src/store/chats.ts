@@ -66,19 +66,33 @@ let pendingFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
 const LOCK_NO_SERVER = '🔒 No hay conexión con el servidor';
 const LOCK_NO_PEER_KEY =
-  '🔒 Este teléfono aún no tiene la llave de este contacto';
+  '🔒 Este teléfono todavía no tiene la llave de este contacto';
 const LOCK_ASK_RESEND =
-  '🔒 No se pudo abrir este mensaje. Pide que te lo manden de nuevo';
+  '🔒 No se pudo abrir este mensaje. Pedile a quien te lo mandó que lo reenvíe';
 
-function userFacingDecryptLock(lastErr: string): string {
-  const e = (lastErr || '').toLowerCase();
-  if (
-    e.includes('gate') ||
+function looksLikeNetworkFailure(errText: string): boolean {
+  const e = (errText || '').toLowerCase();
+  return (
     e.includes('network') ||
     e.includes('timeout') ||
+    e.includes('timed out') ||
     e.includes('failed to fetch') ||
-    e.includes('network request failed')
-  ) {
+    e.includes('network request failed') ||
+    e.includes('internet') ||
+    e.includes('unreachable') ||
+    e.includes('econnrefused') ||
+    e.includes('enotfound') ||
+    e.includes('offline')
+  );
+}
+
+function userFacingDecryptLock(lastErr: string): string {
+  // Offline / airplane: prefer the plain network message.
+  if (useAuthStore.getState().sessionOffline) {
+    return LOCK_NO_SERVER;
+  }
+  const e = (lastErr || '').toLowerCase();
+  if (looksLikeNetworkFailure(e)) {
     return LOCK_NO_SERVER;
   }
   if (
@@ -94,6 +108,7 @@ function userFacingDecryptLock(lastErr: string): string {
   if (isSpentSignalEnvelopeError(lastErr) || e.includes('message key not found')) {
     return LOCK_ASK_RESEND;
   }
+  // Device-guard / unknown: ask to resend — never technical jargon on screen.
   return LOCK_ASK_RESEND;
 }
 
@@ -363,6 +378,19 @@ async function maybeDecryptMessage(
       });
     }
 
+    // Airplane / sin red: no intentar abrir hasta que vuelva la conexión.
+    if (useAuthStore.getState().sessionOffline) {
+      if (!opts?.skipEnqueue && cid) {
+        enqueuePendingDecrypt(message, peerUserId, cid);
+      }
+      return finish({
+        ...message,
+        originalText: LOCK_NO_SERVER,
+        translatedText: LOCK_NO_SERVER,
+        isTranslated: false,
+      });
+    }
+
     try {
       await awaitSignalStoreReady();
     } catch (err) {
@@ -387,10 +415,11 @@ async function maybeDecryptMessage(
     const { mayDecryptE2e } = await import('../security/deviceGuard');
     const gate = mayDecryptE2e();
     if (!gate.ok) {
+      // Not a network failure — do not say "sin conexión". Ask to resend.
       return finish({
         ...message,
-        originalText: LOCK_NO_SERVER,
-        translatedText: LOCK_NO_SERVER,
+        originalText: LOCK_ASK_RESEND,
+        translatedText: LOCK_ASK_RESEND,
         isTranslated: false,
       });
     }
@@ -634,8 +663,6 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
           continue;
         }
         // New id OR prior lock/failure with same ciphertext: try (again) to open.
-        // Pending queue also retries; this covers identity-trust / open-chat paths
-        // that used to freeze on "🔒 No se pudo descifrar (sesión Signal)".
         decrypted.push(await maybeDecryptMessage(m, fromPeer, chatId));
       }
       set((state) => ({
@@ -645,8 +672,13 @@ export const useChatsStore = create<ChatsState>((set, get) => ({
         },
       }));
     } catch (err) {
+      const raw = err instanceof Error ? err.message : String(err);
       const message =
-        err instanceof ApiError ? err.message : 'Failed to load messages';
+        useAuthStore.getState().sessionOffline || looksLikeNetworkFailure(raw)
+          ? 'No hay conexión con el servidor'
+          : err instanceof ApiError
+            ? err.message
+            : 'No se pudieron cargar los mensajes';
       set({ error: message });
     }
   },
